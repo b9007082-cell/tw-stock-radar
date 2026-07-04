@@ -1,0 +1,15 @@
+{
+  "expectancy": 0.26756038369660057,
+  "gate_passed": false,
+  "gate_reasons": [
+    "交易樣本 2/200"
+  ],
+  "max_drawdown": -0.04226186399807075,
+  "profit_factor": 13.662024737423547,
+  "sharpe_like": 0.8635931915395577,
+  "strategy_version": "2026.07.v1",
+  "symbol": "1409",
+  "total_return": 0.5107195011504948,
+  "trades": 2,
+  "win_rate": 0.5
+}

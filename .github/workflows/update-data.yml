@@ -1,0 +1,68 @@
+name: Update market data
+
+on:
+  schedule:
+    - cron: "30 11 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: "Backfill the latest six months before updating"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-market-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend
+        run: python -m pip install -e "./backend[dev]"
+
+      - name: Backfill six months
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.backfill }}
+        run: python -m app.cli backfill-history --days 183 --delay 0.15
+
+      - name: Update recent trading days
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.backfill) }}
+        run: python -m app.cli update-latest --lookback 10 --delay 0.15
+
+      - name: Export static website data
+        run: python -m app.cli export-static
+
+      - name: Run backend tests
+        working-directory: backend
+        run: python -m pytest
+
+      - name: Commit data only when changed
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/raw data/state frontend/public/data
+          if git diff --cached --quiet; then
+            echo "No new trading data."
+            exit 0
+          fi
+          DATA_DATE="$(python -c "import json; print(json.load(open('data/state/manifest.json', encoding='utf-8'))['latest_trade_date'])")"
+          git commit -m "data: update market snapshot ${DATA_DATE}"
+          git push
+
