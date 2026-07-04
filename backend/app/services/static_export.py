@@ -158,8 +158,14 @@ def export_static_data(
                     "score": result.score,
                     "close": result.close,
                     "entry_price": result.entry_price,
+                    "entry_zone_low": result.entry_zone_low,
+                    "entry_zone_high": result.entry_zone_high,
+                    "trigger_price": result.trigger_price,
                     "stop_price": result.stop_price,
                     "risk_percent": result.risk_percent,
+                    "timing_status": result.timing_status,
+                    "timing_note": result.timing_note,
+                    "overheated": result.overheated,
                     "executable": result.executable and settings.strategy_approved,
                     "validation_status": (
                         "APPROVED"

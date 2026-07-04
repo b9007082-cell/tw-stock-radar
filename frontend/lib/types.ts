@@ -1,4 +1,10 @@
 export type SignalLevel = "WATCH" | "TRIAL" | "CONFIRMED";
+export type EntryTimingStatus =
+  | "WAIT_CONFIRMATION"
+  | "WAIT_PULLBACK"
+  | "TRIAL_ENTRY"
+  | "READY"
+  | "OVERHEATED";
 
 export interface Summary {
   as_of: string | null;
@@ -23,8 +29,14 @@ export interface Signal {
   score: number;
   close: number;
   entry_price: number | null;
+  entry_zone_low?: number | null;
+  entry_zone_high?: number | null;
+  trigger_price?: number | null;
   stop_price: number | null;
   risk_percent: number | null;
+  timing_status?: EntryTimingStatus;
+  timing_note?: string;
+  overheated?: boolean;
   executable: boolean;
   validation_status: "APPROVED" | "RESEARCH";
   reasons: string[];

@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
 from app.domain import Bar, SignalLevel
-from app.services.strategies import consolidation_signal
+from app.services.strategies import _entry_timing, consolidation_signal
 
 
 def _breakout_bars() -> list[Bar]:
@@ -41,6 +41,11 @@ def test_consolidation_breakout_is_confirmed() -> None:
     assert signal is not None
     assert signal.level == SignalLevel.CONFIRMED
     assert signal.entry_price is not None
+    assert signal.entry_zone_low is not None
+    assert signal.entry_zone_high is not None
+    assert signal.entry_zone_low <= signal.entry_zone_high
+    assert signal.trigger_price is not None
+    assert signal.timing_status in {"READY", "WAIT_PULLBACK"}
     assert signal.stop_price is not None
 
 
@@ -57,3 +62,26 @@ def test_wide_range_is_not_misclassified_as_consolidation() -> None:
             volume=bar.volume,
         )
     assert consolidation_signal(bars) is None
+
+
+def test_entry_timing_rejects_overheated_price() -> None:
+    latest = Bar(
+        date=date(2026, 7, 3),
+        open=108,
+        high=111,
+        low=107,
+        close=110,
+        volume=2_000_000,
+    )
+    _, _, status, note, overheated = _entry_timing(
+        strategy="STRONG_PULLBACK",
+        level=SignalLevel.CONFIRMED,
+        latest=latest,
+        ma5=100,
+        ma10=97,
+        trigger_price=108,
+        support_price=97,
+    )
+    assert status == "OVERHEATED"
+    assert overheated is True
+    assert "不追價" in note

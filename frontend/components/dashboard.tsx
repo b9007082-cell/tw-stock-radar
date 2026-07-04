@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type {
   BacktestReport,
   Bar,
+  EntryTimingStatus,
   Signal,
   SignalLevel,
   Summary,
@@ -23,8 +24,42 @@ const strategyLabel: Record<Signal["strategy"], string> = {
   STRONG_PULLBACK: "強勢回檔",
 };
 
-function formatPrice(value: number | null) {
-  return value === null ? "—" : value.toFixed(2);
+const timingLabel: Record<EntryTimingStatus, string> = {
+  WAIT_CONFIRMATION: "等待確認",
+  WAIT_PULLBACK: "等待回測",
+  TRIAL_ENTRY: "可試單",
+  READY: "進場區",
+  OVERHEATED: "過熱勿追",
+};
+
+const timingStyle: Record<EntryTimingStatus, string> = {
+  WAIT_CONFIRMATION: "border-blue-400/25 bg-blue-400/5 text-blue-200",
+  WAIT_PULLBACK: "border-amber-400/25 bg-amber-400/5 text-amber-100",
+  TRIAL_ENTRY: "border-amber-300/30 bg-amber-300/10 text-amber-100",
+  READY: "border-emerald-400/30 bg-emerald-400/10 text-emerald-100",
+  OVERHEATED: "border-rose-400/30 bg-rose-400/10 text-rose-100",
+};
+
+function formatPrice(value: number | null | undefined) {
+  return value == null ? "—" : value.toFixed(2);
+}
+
+function formatEntryZone(signal: Signal) {
+  if (signal.entry_zone_low == null || signal.entry_zone_high == null) {
+    return formatPrice(signal.entry_price);
+  }
+  return `${formatPrice(signal.entry_zone_low)}～${formatPrice(signal.entry_zone_high)}`;
+}
+
+function getTimingStatus(signal: Signal): EntryTimingStatus {
+  return (
+    signal.timing_status ??
+    (signal.level === "CONFIRMED"
+      ? "READY"
+      : signal.level === "TRIAL"
+        ? "TRIAL_ENTRY"
+        : "WAIT_CONFIRMATION")
+  );
 }
 
 function LevelBadge({ level }: { level: SignalLevel }) {
@@ -39,6 +74,20 @@ function LevelBadge({ level }: { level: SignalLevel }) {
     >
       {levelLabel[level]}
     </span>
+  );
+}
+
+function EntryTimingPanel({ signal }: { signal: Signal }) {
+  const status = getTimingStatus(signal);
+  return (
+    <div className={`mt-4 rounded-xl border p-3 ${timingStyle[status]}`}>
+      <div className="text-xs font-bold tracking-wider">
+        今日時機：{timingLabel[status]}
+      </div>
+      <div className="mt-1 text-xs leading-5 opacity-80">
+        {signal.timing_note ?? "依最新收盤、均線與量能重新確認進場條件。"}
+      </div>
+    </div>
   );
 }
 
@@ -196,7 +245,7 @@ export function Dashboard() {
                   <th className="px-4 py-3">階段</th>
                   <th className="px-4 py-3 text-right">分數</th>
                   <th className="px-4 py-3 text-right">收盤</th>
-                  <th className="px-4 py-3 text-right">進場</th>
+                  <th className="px-4 py-3 text-right">建議進場區</th>
                   <th className="px-4 py-3 text-right">停損</th>
                   <th className="px-4 py-3 text-right">風險</th>
                 </tr>
@@ -230,8 +279,8 @@ export function Dashboard() {
                       {signal.score}
                     </td>
                     <td className="px-4 py-3 text-right">{formatPrice(signal.close)}</td>
-                    <td className="px-4 py-3 text-right text-emerald-300">
-                      {formatPrice(signal.entry_price)}
+                    <td className="whitespace-nowrap px-4 py-3 text-right text-emerald-300">
+                      {formatEntryZone(signal)}
                     </td>
                     <td className="px-4 py-3 text-right text-rose-300">
                       {formatPrice(signal.stop_price)}
@@ -270,9 +319,11 @@ export function Dashboard() {
               <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/35">
                 <StockChart bars={bars} />
               </div>
-              <div className="mt-4 grid grid-cols-3 gap-2">
+              <EntryTimingPanel signal={selected} />
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {[
-                  ["參考進場", formatPrice(selected.entry_price)],
+                  ["建議進場區", formatEntryZone(selected)],
+                  ["確認價", formatPrice(selected.trigger_price)],
                   ["防守價", formatPrice(selected.stop_price)],
                   [
                     "單筆風險",

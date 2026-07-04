@@ -7,6 +7,63 @@ from app.services.indicators import confirmed_swings, percent_change, sma
 MIN_BARS = 65
 
 
+def _entry_timing(
+    *,
+    strategy: str,
+    level: SignalLevel,
+    latest: Bar,
+    ma5: float,
+    ma10: float,
+    trigger_price: float,
+    support_price: float,
+) -> tuple[float, float, str, str, bool]:
+    distance_ma5 = (latest.close / ma5) - 1 if ma5 else 1.0
+    overheated = distance_ma5 > 0.08
+
+    if level == SignalLevel.WATCH:
+        if strategy == "CONSOLIDATION_BREAKOUT":
+            zone_low = trigger_price
+            zone_high = trigger_price * 1.01
+            note = "等待收盤站上箱頂，且成交量達20日均量1.5倍。"
+        else:
+            zone_low = min(ma10, ma5)
+            zone_high = max(ma10, ma5)
+            note = "等待重新站回5日線並突破前一日高點，跌破20日線取消。"
+        return (
+            round(zone_low, 2),
+            round(zone_high, 2),
+            "WAIT_CONFIRMATION",
+            note,
+            overheated,
+        )
+
+    anchor = max(support_price, ma5)
+    zone_low = min(anchor, latest.close)
+    zone_high = min(latest.close, anchor * 1.03)
+    zone_high = max(zone_low, zone_high)
+
+    if overheated:
+        status = "OVERHEATED"
+        note = "現價高於5日線超過8%，暫不追價，等待量縮回測5至10日線。"
+    elif distance_ma5 > 0.03:
+        status = "WAIT_PULLBACK"
+        note = "訊號成立但離5日線超過3%，等待回到進場區且支撐不破。"
+    elif level == SignalLevel.TRIAL:
+        status = "TRIAL_ENTRY"
+        note = "位於試單區，可用0.5%帳戶風險分批，確認價失守則退出。"
+    else:
+        status = "READY"
+        note = "量價與趨勢已確認，可在進場區分批，避免高於區間上緣追價。"
+
+    return (
+        round(zone_low, 2),
+        round(zone_high, 2),
+        status,
+        note,
+        overheated,
+    )
+
+
 def _risk(
     bars: Sequence[Bar], ma20: float, entry: float
 ) -> tuple[float, float, bool]:
@@ -27,12 +84,15 @@ def _common_metrics(bars: Sequence[Bar]) -> dict[str, float | bool]:
     closes = [bar.close for bar in bars]
     volumes = [float(bar.volume) for bar in bars]
     ma5s = sma(closes, 5)
+    ma10s = sma(closes, 10)
     ma20s = sma(closes, 20)
     ma60s = sma(closes, 60)
     vol5s = sma(volumes, 5)
+    vol10s = sma(volumes, 10)
     vol20s = sma(volumes, 20)
     index = len(bars) - 1
     ma5 = float(ma5s[index] or 0)
+    ma10 = float(ma10s[index] or 0)
     ma20 = float(ma20s[index] or 0)
     ma60 = float(ma60s[index] or 0)
     ma20_10 = float(ma20s[index - 10] or ma20)
@@ -40,11 +100,13 @@ def _common_metrics(bars: Sequence[Bar]) -> dict[str, float | bool]:
     higher_high, higher_low = _trend_structure(bars)
     return {
         "ma5": ma5,
+        "ma10": ma10,
         "ma20": ma20,
         "ma60": ma60,
         "ma20_slope_10d": percent_change(ma20, ma20_10),
         "ma60_slope_10d": percent_change(ma60, ma60_10),
         "vol5": float(vol5s[index] or 0),
+        "vol10": float(vol10s[index] or 0),
         "vol20": float(vol20s[index] or 0),
         "higher_high": higher_high,
         "higher_low": higher_low,
@@ -98,7 +160,18 @@ def consolidation_signal(bars: Sequence[Bar]) -> StrategySignal | None:
     else:
         return None
 
-    entry = latest.close if level != SignalLevel.WATCH else box_top
+    entry_zone_low, entry_zone_high, timing_status, timing_note, overheated = (
+        _entry_timing(
+            strategy="CONSOLIDATION_BREAKOUT",
+            level=level,
+            latest=latest,
+            ma5=float(metrics["ma5"]),
+            ma10=float(metrics["ma10"]),
+            trigger_price=box_top,
+            support_price=box_top,
+        )
+    )
+    entry = entry_zone_high
     stop, risk_percent, executable = _risk(
         bars, float(metrics["ma20"]), entry
     )
@@ -131,8 +204,14 @@ def consolidation_signal(bars: Sequence[Bar]) -> StrategySignal | None:
         score={SignalLevel.WATCH: 60, SignalLevel.TRIAL: 78, SignalLevel.CONFIRMED: 92}[level],
         close=latest.close,
         entry_price=round(entry, 2),
+        entry_zone_low=entry_zone_low,
+        entry_zone_high=entry_zone_high,
+        trigger_price=round(box_top, 2),
         stop_price=stop,
         risk_percent=risk_percent,
+        timing_status=timing_status,
+        timing_note=timing_note,
+        overheated=overheated,
         executable=executable and level != SignalLevel.WATCH,
         reasons=reasons,
         metrics=details,
@@ -151,6 +230,7 @@ def strong_pullback_signal(
     ma5s = sma(closes, 5)
     ma20 = float(metrics["ma20"])
     ma5 = float(metrics["ma5"])
+    ma10 = float(metrics["ma10"])
     previous_ma5 = float(ma5s[-2] or 0)
     recent_60_high = max(bar.high for bar in bars[-60:])
     recent_20_high = max(bar.high for bar in bars[-20:])
@@ -200,7 +280,23 @@ def strong_pullback_signal(
     else:
         return None
 
-    entry = latest.close if level != SignalLevel.WATCH else ma5
+    trigger_price = (
+        max(bar.high for bar in bars[-6:-1])
+        if level == SignalLevel.CONFIRMED
+        else previous.high
+    )
+    entry_zone_low, entry_zone_high, timing_status, timing_note, overheated = (
+        _entry_timing(
+            strategy="STRONG_PULLBACK",
+            level=level,
+            latest=latest,
+            ma5=ma5,
+            ma10=ma10,
+            trigger_price=trigger_price,
+            support_price=ma10,
+        )
+    )
+    entry = entry_zone_high
     stop, risk_percent, executable = _risk(bars, ma20, entry)
     reasons = [
         f"60日相對強度百分位 {relative_strength_percentile:.0%}",
@@ -228,8 +324,14 @@ def strong_pullback_signal(
         score={SignalLevel.WATCH: 65, SignalLevel.TRIAL: 82, SignalLevel.CONFIRMED: 94}[level],
         close=latest.close,
         entry_price=round(entry, 2),
+        entry_zone_low=entry_zone_low,
+        entry_zone_high=entry_zone_high,
+        trigger_price=round(trigger_price, 2),
         stop_price=stop,
         risk_percent=risk_percent,
+        timing_status=timing_status,
+        timing_note=timing_note,
+        overheated=overheated,
         executable=executable and level != SignalLevel.WATCH,
         reasons=reasons,
         metrics=details,
