@@ -22,8 +22,22 @@ const levelLabel: Record<SignalLevel, string> = {
 };
 
 const strategyLabel: Record<Signal["strategy"], string> = {
+  MA_CONVERGENCE: "均線糾結",
   CONSOLIDATION_BREAKOUT: "盤整突破",
   STRONG_PULLBACK: "強勢回檔",
+};
+
+const strategyTabs = [
+  ["ALL", "全部策略"],
+  ["MA_CONVERGENCE", "均線糾結"],
+  ["CONSOLIDATION_BREAKOUT", "盤整突破"],
+  ["STRONG_PULLBACK", "強勢回檔"],
+] as const;
+
+const levelOrder: Record<SignalLevel, number> = {
+  CONFIRMED: 0,
+  TRIAL: 1,
+  WATCH: 2,
 };
 
 const timingLabel: Record<EntryTimingStatus, string> = {
@@ -64,6 +78,48 @@ function getTimingStatus(signal: Signal): EntryTimingStatus {
   );
 }
 
+function metricNumber(signal: Signal, key: string) {
+  const value = signal.metrics[key];
+  return typeof value === "number" ? value : null;
+}
+
+function formatPercent(value: number | null, digits = 1) {
+  return value == null ? "—" : `${(value * 100).toFixed(digits)}%`;
+}
+
+function formatBreakoutDistance(signal: Signal) {
+  const distance = metricNumber(signal, "distance_to_breakout");
+  if (distance == null) return "—";
+  return distance >= 0
+    ? `尚差 ${formatPercent(distance)}`
+    : `已突破 ${formatPercent(Math.abs(distance))}`;
+}
+
+function ConvergenceMetricsPanel({ signal }: { signal: Signal }) {
+  if (signal.strategy !== "MA_CONVERGENCE") return null;
+  const items = [
+    ["均線差距", formatPercent(metricNumber(signal, "ma_spread"))],
+    ["距突破價", formatBreakoutDistance(signal)],
+    ["量縮程度", formatPercent(metricNumber(signal, "volume_contraction"), 0)],
+    ["確認價", formatPrice(signal.trigger_price)],
+  ];
+  return (
+    <div className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
+      <div className="mb-3 text-xs font-bold tracking-wider text-cyan-200">
+        均線糾結監測
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {items.map(([label, value]) => (
+          <div key={label} className="rounded-lg bg-slate-950/35 p-2.5">
+            <div className="text-[10px] text-slate-500">{label}</div>
+            <div className="mt-1 text-sm font-semibold text-cyan-100">{value}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function LevelBadge({ level }: { level: SignalLevel }) {
   const styles = {
     WATCH: "border-blue-400/30 bg-blue-400/10 text-blue-300",
@@ -101,6 +157,9 @@ export function Dashboard() {
   const [backtest, setBacktest] = useState<BacktestReport | null>(null);
   const [capital, setCapital] = useState(1_000_000);
   const [filter, setFilter] = useState<SignalLevel | "ALL">("ALL");
+  const [strategyFilter, setStrategyFilter] = useState<
+    Signal["strategy"] | "ALL"
+  >("ALL");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -118,9 +177,48 @@ export function Dashboard() {
       .finally(() => setLoading(false));
   }, []);
 
+  const visibleSignals = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const filtered = signals.filter(
+      (signal) =>
+        (strategyFilter === "ALL" || signal.strategy === strategyFilter) &&
+        (filter === "ALL" || signal.level === filter) &&
+        (!needle ||
+          signal.symbol.toLowerCase().includes(needle) ||
+          signal.name.toLowerCase().includes(needle)),
+    );
+    if (strategyFilter === "MA_CONVERGENCE") {
+      filtered.sort((left, right) => {
+        const stageDifference =
+          levelOrder[left.level] - levelOrder[right.level];
+        if (stageDifference !== 0) return stageDifference;
+        const leftDistance = Math.abs(
+          metricNumber(left, "distance_to_breakout") ?? Number.POSITIVE_INFINITY,
+        );
+        const rightDistance = Math.abs(
+          metricNumber(right, "distance_to_breakout") ?? Number.POSITIVE_INFINITY,
+        );
+        return leftDistance - rightDistance || right.score - left.score;
+      });
+    }
+    return filtered;
+  }, [filter, query, signals, strategyFilter]);
+
+  const activeSelected = useMemo(
+    () =>
+      selected &&
+      visibleSignals.some((signal) => signal.id === selected.id)
+        ? selected
+        : (visibleSignals[0] ?? null),
+    [selected, visibleSignals],
+  );
+
   useEffect(() => {
-    if (!selected) return;
-    Promise.all([api.bars(selected.symbol), api.backtest(selected.symbol)])
+    if (!activeSelected) return;
+    Promise.all([
+      api.bars(activeSelected.symbol),
+      api.backtest(activeSelected.symbol, activeSelected.strategy),
+    ])
       .then(([barData, report]) => {
         setBars(barData);
         setBacktest(report);
@@ -129,18 +227,7 @@ export function Dashboard() {
         setBars([]);
         setBacktest(null);
       });
-  }, [selected]);
-
-  const visibleSignals = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return signals.filter(
-      (signal) =>
-        (filter === "ALL" || signal.level === filter) &&
-        (!needle ||
-          signal.symbol.toLowerCase().includes(needle) ||
-          signal.name.toLowerCase().includes(needle)),
-    );
-  }, [filter, query, signals]);
+  }, [activeSelected]);
 
   const cards = [
     { label: "今日候選", value: summary?.total_signals ?? 0, tone: "text-white" },
@@ -151,20 +238,21 @@ export function Dashboard() {
 
   const positionShares = useMemo(() => {
     if (
-      !selected ||
-      selected.entry_price === null ||
-      selected.stop_price === null ||
-      selected.level === "WATCH"
+      !activeSelected ||
+      activeSelected.entry_price === null ||
+      activeSelected.stop_price === null ||
+      activeSelected.level === "WATCH"
     ) {
       return 0;
     }
-    const perShareRisk = selected.entry_price - selected.stop_price;
+    const perShareRisk =
+      activeSelected.entry_price - activeSelected.stop_price;
     if (perShareRisk <= 0) return 0;
-    const riskRate = selected.level === "TRIAL" ? 0.005 : 0.01;
+    const riskRate = activeSelected.level === "TRIAL" ? 0.005 : 0.01;
     return (
       Math.floor((capital * riskRate) / perShareRisk / 1000) * 1000
     );
-  }, [capital, selected]);
+  }, [activeSelected, capital]);
 
   return (
     <main className="mx-auto min-h-screen max-w-[1600px] px-4 py-5 sm:px-7">
@@ -178,7 +266,7 @@ export function Dashboard() {
             台股起漲雷達
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            盤整突破 × 強勢回檔｜規則透明、訊號可回測
+            均線糾結 × 盤整突破 × 強勢回檔｜規則透明、訊號可回測
           </p>
         </div>
         <div className="text-left text-xs leading-6 text-slate-400 sm:text-right">
@@ -223,7 +311,23 @@ export function Dashboard() {
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(420px,0.75fr)]">
         <article className="overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/70 backdrop-blur">
-          <div className="flex flex-col gap-3 border-b border-slate-700/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="border-b border-slate-700/70 p-4">
+            <div className="mb-3 flex flex-wrap gap-2">
+              {strategyTabs.map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setStrategyFilter(value)}
+                  className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                    strategyFilter === value
+                      ? "bg-cyan-300 text-slate-950"
+                      : "border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
               {(["ALL", "WATCH", "TRIAL", "CONFIRMED"] as const).map(
                 (item) => (
@@ -247,6 +351,7 @@ export function Dashboard() {
               placeholder="搜尋代號或名稱"
               className="rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm outline-none placeholder:text-slate-600 focus:border-emerald-400"
             />
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-sm">
@@ -268,7 +373,7 @@ export function Dashboard() {
                     key={signal.id}
                     onClick={() => setSelected(signal)}
                     className={`border-t border-slate-800 transition hover:bg-slate-800/80 ${
-                      selected?.id === signal.id ? "bg-emerald-400/5" : ""
+                      activeSelected?.id === signal.id ? "bg-emerald-400/5" : ""
                     }`}
                   >
                     <td className="px-4 py-3">
@@ -282,7 +387,20 @@ export function Dashboard() {
                       </button>
                     </td>
                     <td className="px-4 py-3 text-slate-300">
-                      {strategyLabel[signal.strategy]}
+                      <div>{strategyLabel[signal.strategy]}</div>
+                      {signal.strategy === "MA_CONVERGENCE" && (
+                        <div className="mt-1 whitespace-nowrap text-[11px] text-cyan-300/70">
+                          差距 {formatPercent(metricNumber(signal, "ma_spread"))}
+                          {" · "}
+                          {formatBreakoutDistance(signal)}
+                          {" · "}
+                          量縮{" "}
+                          {formatPercent(
+                            metricNumber(signal, "volume_contraction"),
+                            0,
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <LevelBadge level={signal.level} />
@@ -315,33 +433,35 @@ export function Dashboard() {
         </article>
 
         <aside className="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-4 backdrop-blur">
-          {selected ? (
+          {activeSelected ? (
             <>
               <div className="mb-4 flex items-start justify-between gap-4">
                 <div>
                   <div className="text-xl font-bold">
-                    {selected.symbol} {selected.name}
+                    {activeSelected.symbol} {activeSelected.name}
                   </div>
                   <div className="mt-1 text-xs text-slate-500">
-                    {strategyLabel[selected.strategy]} · {selected.signal_date}
+                    {strategyLabel[activeSelected.strategy]} ·{" "}
+                    {activeSelected.signal_date}
                   </div>
                 </div>
-                <LevelBadge level={selected.level} />
+                <LevelBadge level={activeSelected.level} />
               </div>
               <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/35">
                 <StockChart bars={bars} />
               </div>
-              <EntryTimingPanel signal={selected} />
+              <ConvergenceMetricsPanel signal={activeSelected} />
+              <EntryTimingPanel signal={activeSelected} />
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {[
-                  ["建議進場區", formatEntryZone(selected)],
-                  ["確認價", formatPrice(selected.trigger_price)],
-                  ["防守價", formatPrice(selected.stop_price)],
+                  ["建議進場區", formatEntryZone(activeSelected)],
+                  ["確認價", formatPrice(activeSelected.trigger_price)],
+                  ["防守價", formatPrice(activeSelected.stop_price)],
                   [
                     "單筆風險",
-                    selected.risk_percent === null
+                    activeSelected.risk_percent === null
                       ? "—"
-                      : `${selected.risk_percent.toFixed(1)}%`,
+                      : `${activeSelected.risk_percent.toFixed(1)}%`,
                   ],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-xl bg-slate-800/70 p-3">
@@ -380,9 +500,9 @@ export function Dashboard() {
                 </div>
                 <div className="mt-3 flex items-end justify-between">
                   <div className="text-xs text-slate-500">
-                    {selected.level === "TRIAL"
+                    {activeSelected.level === "TRIAL"
                       ? "依 0.5% 風險試算"
-                      : selected.level === "CONFIRMED"
+                      : activeSelected.level === "CONFIRMED"
                         ? "依 1% 風險試算"
                         : "觀察階段不配置部位"}
                   </div>
@@ -437,7 +557,7 @@ export function Dashboard() {
                   訊號依據
                 </h2>
                 <ul className="mt-3 space-y-2">
-                  {selected.reasons.map((reason) => (
+                  {activeSelected.reasons.map((reason) => (
                     <li
                       key={reason}
                       className="flex gap-2 text-sm leading-6 text-slate-300"
@@ -449,7 +569,7 @@ export function Dashboard() {
                 </ul>
               </div>
               <div className="mt-5 rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100/75">
-                {selected.validation_status === "RESEARCH"
+                {activeSelected.validation_status === "RESEARCH"
                   ? "目前策略尚未通過完整樣本外驗證，只能作為研究訊號。"
                   : "策略已通過驗證閘門；操作仍須依個人風險承受度評估。"}
               </div>

@@ -48,6 +48,7 @@ class SummaryResponse(BaseModel):
 
 class BacktestResponse(BaseModel):
     symbol: str
+    strategy: str
     strategy_version: str
     trades: int
     win_rate: float

@@ -38,12 +38,12 @@ export const api = {
     DATA_MODE === "static"
       ? getStaticJson<Bar[]>(`bars/${encodeURIComponent(symbol)}.json`)
       : getJson<Bar[]>(`/api/instruments/${encodeURIComponent(symbol)}/bars`),
-  backtest: (symbol: string) =>
+  backtest: (symbol: string, strategy: Signal["strategy"]) =>
     DATA_MODE === "static"
       ? getStaticJson<BacktestReport>(
-          `backtests/${encodeURIComponent(symbol)}.json`,
+          `backtests/${encodeURIComponent(symbol)}/${encodeURIComponent(strategy)}.json`,
         )
       : getJson<BacktestReport>(
-          `/api/instruments/${encodeURIComponent(symbol)}/backtest`,
+          `/api/instruments/${encodeURIComponent(symbol)}/backtest?strategy=${encodeURIComponent(strategy)}`,
         ),
 };

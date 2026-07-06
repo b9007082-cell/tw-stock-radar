@@ -18,6 +18,7 @@ def backtest(
     bars: list[Bar],
     relative_strength_percentile: float = 0.9,
     config: BacktestConfig | None = None,
+    strategy: str | None = None,
 ) -> dict[str, float | int]:
     config = config or BacktestConfig()
     trades: list[float] = []
@@ -33,6 +34,10 @@ def backtest(
             candidates = scan_bars(
                 bars[: index + 1], relative_strength_percentile
             )
+            if strategy is not None:
+                candidates = [
+                    item for item in candidates if item.strategy == strategy
+                ]
             actionable = [
                 item
                 for item in candidates
@@ -100,4 +105,3 @@ def backtest(
         "max_drawdown": min(drawdowns),
         "sharpe_like": mean(trades) / deviation if deviation else 0.0,
     }
-

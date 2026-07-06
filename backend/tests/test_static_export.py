@@ -62,3 +62,12 @@ def test_static_export_produces_deterministic_contract(tmp_path) -> None:
     assert first["trading_days"] == 70
     assert summary["instruments"] == 3
     assert isinstance(signals, list)
+    for signal in signals:
+        backtest_path = (
+            output_dir
+            / "backtests"
+            / signal["symbol"]
+            / f"{signal['strategy']}.json"
+        )
+        report = json.loads(backtest_path.read_text("utf-8"))
+        assert report["strategy"] == signal["strategy"]

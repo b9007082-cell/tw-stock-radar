@@ -25,6 +25,13 @@ def _entry_timing(
             zone_low = trigger_price
             zone_high = trigger_price * 1.01
             note = "等待收盤站上箱頂，且成交量達20日均量1.5倍。"
+        elif strategy == "MA_CONVERGENCE":
+            zone_low = min(ma10, ma5)
+            zone_high = max(ma10, ma5)
+            note = (
+                "均線糾結觀察中，不配置正式部位；等待站上全部短均線、"
+                "突破10日高點且量能達20日均量1.2倍。"
+            )
         else:
             zone_low = min(ma10, ma5)
             zone_high = max(ma10, ma5)
@@ -218,6 +225,130 @@ def consolidation_signal(bars: Sequence[Bar]) -> StrategySignal | None:
     )
 
 
+def ma_convergence_signal(bars: Sequence[Bar]) -> StrategySignal | None:
+    if len(bars) < MIN_BARS:
+        return None
+    latest = bars[-1]
+    metrics = _common_metrics(bars)
+    ma5 = float(metrics["ma5"])
+    ma10 = float(metrics["ma10"])
+    ma20 = float(metrics["ma20"])
+    moving_averages = (ma5, ma10, ma20)
+    if ma20 <= 0 or min(moving_averages) <= 0:
+        return None
+
+    base = bars[-41:-1]
+    box_top = max(bar.high for bar in base)
+    box_bottom = min(bar.low for bar in base)
+    box_range = (box_top / box_bottom) - 1 if box_bottom else 1.0
+    ma_spread = (max(moving_averages) - min(moving_averages)) / ma20
+    distance_to_breakout = (box_top - latest.close) / box_top
+    volume_ratio = latest.volume / float(metrics["vol20"] or 1)
+    prior_vol5 = sum(float(bar.volume) for bar in bars[-6:-1]) / 5
+    prior_vol20 = sum(float(bar.volume) for bar in bars[-21:-1]) / 20
+    volume_contraction = prior_vol5 / (prior_vol20 or 1)
+    ma20_slope = float(metrics["ma20_slope_10d"])
+    ma60_slope = float(metrics["ma60_slope_10d"])
+    distance_ma5 = (latest.close / ma5) - 1
+    recent_10_high = max(bar.high for bar in bars[-11:-1])
+
+    valid_setup = (
+        ma_spread <= 0.03
+        and box_range <= 0.18
+        and -0.03 <= distance_to_breakout <= 0.05
+        and -0.01 <= ma20_slope <= 0.03
+        and ma60_slope >= -0.01
+        and volume_contraction <= 0.80
+        and latest.close > box_bottom
+    )
+    watch = valid_setup
+    trial = (
+        valid_setup
+        and latest.close > max(ma5, ma10, ma20, recent_10_high)
+        and volume_ratio >= 1.2
+    )
+    confirmed = (
+        valid_setup
+        and latest.close > box_top
+        and volume_ratio >= 1.5
+        and distance_ma5 <= 0.08
+    )
+
+    if confirmed:
+        level = SignalLevel.CONFIRMED
+    elif trial:
+        level = SignalLevel.TRIAL
+    elif watch:
+        level = SignalLevel.WATCH
+    else:
+        return None
+
+    support_price = (
+        box_top
+        if level == SignalLevel.CONFIRMED
+        else recent_10_high if level == SignalLevel.TRIAL else ma20
+    )
+    entry_zone_low, entry_zone_high, timing_status, timing_note, overheated = (
+        _entry_timing(
+            strategy="MA_CONVERGENCE",
+            level=level,
+            latest=latest,
+            ma5=ma5,
+            ma10=ma10,
+            trigger_price=box_top,
+            support_price=support_price,
+        )
+    )
+    entry = entry_zone_high
+    stop, risk_percent, executable = _risk(bars, ma20, entry)
+    reasons = [
+        f"5、10、20日均線最大差距 {ma_spread:.1%}",
+        f"距40日箱頂 {distance_to_breakout:.1%}",
+        f"突破前5日/20日均量 {volume_contraction:.0%}",
+    ]
+    if level == SignalLevel.CONFIRMED:
+        reasons.append("收盤帶量突破40日箱頂，確認起漲")
+    elif level == SignalLevel.TRIAL:
+        reasons.append("站上全部短均線並帶量突破10日高點")
+    else:
+        reasons.append("均線糾結且量縮，列入提前觀察")
+
+    details = dict(metrics)
+    details.update(
+        box_top=box_top,
+        box_bottom=box_bottom,
+        box_range=box_range,
+        ma_spread=ma_spread,
+        distance_to_breakout=distance_to_breakout,
+        volume_contraction=volume_contraction,
+        volume_ratio=volume_ratio,
+        recent_10_high=recent_10_high,
+    )
+    return StrategySignal(
+        strategy="MA_CONVERGENCE",
+        level=level,
+        signal_date=latest.date,
+        score={
+            SignalLevel.WATCH: 68,
+            SignalLevel.TRIAL: 84,
+            SignalLevel.CONFIRMED: 93,
+        }[level],
+        close=latest.close,
+        entry_price=round(entry, 2),
+        entry_zone_low=entry_zone_low,
+        entry_zone_high=entry_zone_high,
+        trigger_price=round(box_top, 2),
+        stop_price=stop,
+        risk_percent=risk_percent,
+        timing_status=timing_status,
+        timing_note=timing_note,
+        overheated=overheated,
+        executable=executable and level != SignalLevel.WATCH,
+        reasons=reasons,
+        metrics=details,
+    )
+
+
 def strong_pullback_signal(
     bars: Sequence[Bar], relative_strength_percentile: float
 ) -> StrategySignal | None:
@@ -342,6 +473,7 @@ def scan_bars(
     bars: Sequence[Bar], relative_strength_percentile: float = 0.5
 ) -> list[StrategySignal]:
     signals = [
+        ma_convergence_signal(bars),
         consolidation_signal(bars),
         strong_pullback_signal(bars, relative_strength_percentile),
     ]

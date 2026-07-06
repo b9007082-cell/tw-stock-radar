@@ -45,8 +45,13 @@ def _percentile_ranks(returns: dict[str, float]) -> dict[str, float]:
     return {symbol: rank / denominator for rank, (symbol, _) in enumerate(ordered)}
 
 
-def _serialize_backtest(symbol: str, bars: list[Bar], percentile: float) -> dict[str, Any]:
-    report = backtest(bars, percentile)
+def _serialize_backtest(
+    symbol: str,
+    strategy: str,
+    bars: list[Bar],
+    percentile: float,
+) -> dict[str, Any]:
+    report = backtest(bars, percentile, strategy=strategy)
     profit_factor = float(report["profit_factor"])
     trades = int(report["trades"])
     expectancy = float(report["expectancy"])
@@ -62,6 +67,7 @@ def _serialize_backtest(symbol: str, bars: list[Bar], percentile: float) -> dict
         gate_reasons.append(f"最大回撤 {max_drawdown:.1%} 超過 25%")
     return {
         "symbol": symbol,
+        "strategy": strategy,
         "strategy_version": get_settings().strategy_version,
         "trades": trades,
         "win_rate": float(report["win_rate"]),
@@ -139,9 +145,11 @@ def export_static_data(
 
     signals: list[dict[str, Any]] = []
     candidate_symbols: set[str] = set()
+    candidate_strategies: dict[str, set[str]] = defaultdict(set)
     for symbol, bars in eligible.items():
         for result in scan_bars(bars, ranks[symbol]):
             candidate_symbols.add(symbol)
+            candidate_strategies[symbol].add(result.strategy)
             metrics = {
                 **result.metrics,
                 "risk_eligible": result.executable,
@@ -219,11 +227,17 @@ def export_static_data(
             checksums[relative_bar_path] = _write_json(
                 staging, relative_bar_path, bar_payload
             )
-            backtest_payload = _serialize_backtest(symbol, bars, ranks[symbol])
-            relative_backtest_path = f"backtests/{symbol}.json"
-            checksums[relative_backtest_path] = _write_json(
-                staging, relative_backtest_path, backtest_payload
-            )
+            for strategy in sorted(candidate_strategies[symbol]):
+                backtest_payload = _serialize_backtest(
+                    symbol,
+                    strategy,
+                    bars,
+                    ranks[symbol],
+                )
+                relative_backtest_path = f"backtests/{symbol}/{strategy}.json"
+                checksums[relative_backtest_path] = _write_json(
+                    staging, relative_backtest_path, backtest_payload
+                )
         manifest = {
             "schema_version": 1,
             "data_date": scan_date.isoformat(),

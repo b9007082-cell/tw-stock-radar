@@ -134,6 +134,10 @@ def instrument_bars(
 )
 def instrument_backtest(
     symbol: str,
+    strategy: str = Query(
+        default="MA_CONVERGENCE",
+        pattern="^(MA_CONVERGENCE|CONSOLIDATION_BREAKOUT|STRONG_PULLBACK)$",
+    ),
     session: Session = Depends(get_db),
 ) -> BacktestResponse:
     settings = get_settings()
@@ -142,7 +146,7 @@ def instrument_backtest(
     )
     if instrument is None:
         raise HTTPException(status_code=404, detail="Instrument not found")
-    report = backtest(_load_bars(session, instrument.id))
+    report = backtest(_load_bars(session, instrument.id), strategy=strategy)
     trades = int(report["trades"])
     profit_factor = float(report["profit_factor"])
     expectancy = float(report["expectancy"])
@@ -158,6 +162,7 @@ def instrument_backtest(
         gate_reasons.append(f"最大回撤 {max_drawdown:.1%} 超過 25%")
     return BacktestResponse(
         symbol=symbol,
+        strategy=strategy,
         strategy_version=settings.strategy_version,
         trades=trades,
         win_rate=float(report["win_rate"]),

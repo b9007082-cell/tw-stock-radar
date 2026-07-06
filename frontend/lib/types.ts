@@ -23,7 +23,7 @@ export interface Signal {
   name: string;
   market: string;
   signal_date: string;
-  strategy: "CONSOLIDATION_BREAKOUT" | "STRONG_PULLBACK";
+  strategy: "MA_CONVERGENCE" | "CONSOLIDATION_BREAKOUT" | "STRONG_PULLBACK";
   strategy_version: string;
   level: SignalLevel;
   score: number;
@@ -55,6 +55,7 @@ export interface Bar {
 
 export interface BacktestReport {
   symbol: string;
+  strategy: Signal["strategy"];
   strategy_version: string;
   trades: number;
   win_rate: number;
