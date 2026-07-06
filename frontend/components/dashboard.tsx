@@ -17,21 +17,21 @@ const updateWorkerUrl = process.env.NEXT_PUBLIC_UPDATE_WORKER_URL ?? "";
 
 const levelLabel: Record<SignalLevel, string> = {
   WATCH: "觀察",
-  TRIAL: "試單",
+  TRIAL: "轉強",
   CONFIRMED: "確認",
 };
 
 const strategyLabel: Record<Signal["strategy"], string> = {
-  MA_CONVERGENCE: "均線糾結",
+  TREND_CONFIRMATION: "多頭確認",
+  PULLBACK_RESUME: "回後買上漲",
   CONSOLIDATION_BREAKOUT: "盤整突破",
-  STRONG_PULLBACK: "強勢回檔",
 };
 
 const strategyTabs = [
   ["ALL", "全部策略"],
-  ["MA_CONVERGENCE", "均線糾結"],
+  ["TREND_CONFIRMATION", "多頭確認"],
+  ["PULLBACK_RESUME", "回後買上漲"],
   ["CONSOLIDATION_BREAKOUT", "盤整突破"],
-  ["STRONG_PULLBACK", "強勢回檔"],
 ] as const;
 
 const levelOrder: Record<SignalLevel, number> = {
@@ -42,8 +42,8 @@ const levelOrder: Record<SignalLevel, number> = {
 
 const timingLabel: Record<EntryTimingStatus, string> = {
   WAIT_CONFIRMATION: "等待確認",
-  WAIT_PULLBACK: "等待回測",
-  TRIAL_ENTRY: "可試單",
+  WAIT_PULLBACK: "回檔觀察",
+  TRIAL_ENTRY: "轉強中",
   READY: "進場區",
   OVERHEATED: "過熱勿追",
 };
@@ -83,30 +83,24 @@ function metricNumber(signal: Signal, key: string) {
   return typeof value === "number" ? value : null;
 }
 
-function formatPercent(value: number | null, digits = 1) {
-  return value == null ? "—" : `${(value * 100).toFixed(digits)}%`;
-}
-
-function formatBreakoutDistance(signal: Signal) {
-  const distance = metricNumber(signal, "distance_to_breakout");
-  if (distance == null) return "—";
-  return distance >= 0
-    ? `尚差 ${formatPercent(distance)}`
-    : `已突破 ${formatPercent(Math.abs(distance))}`;
-}
-
-function ConvergenceMetricsPanel({ signal }: { signal: Signal }) {
-  if (signal.strategy !== "MA_CONVERGENCE") return null;
+function TrendMetricsPanel({ signal }: { signal: Signal }) {
+  const higherHigh = signal.metrics.higher_high === true;
+  const higherLow = signal.metrics.higher_low === true;
   const items = [
-    ["均線差距", formatPercent(metricNumber(signal, "ma_spread"))],
-    ["距突破價", formatBreakoutDistance(signal)],
-    ["量縮程度", formatPercent(metricNumber(signal, "volume_contraction"), 0)],
-    ["確認價", formatPrice(signal.trigger_price)],
+    ["趨勢結構", higherHigh && higherLow ? "頭頭高・底底高" : "尚未完整"],
+    [
+      "均線排列",
+      `${formatPrice(metricNumber(signal, "ma5"))} ＞ ${formatPrice(
+        metricNumber(signal, "ma10"),
+      )} ＞ ${formatPrice(metricNumber(signal, "ma20"))}`,
+    ],
+    ["最近壓力", formatPrice(metricNumber(signal, "latest_peak"))],
+    ["結構防守", formatPrice(metricNumber(signal, "latest_trough"))],
   ];
   return (
     <div className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
       <div className="mb-3 text-xs font-bold tracking-wider text-cyan-200">
-        均線糾結監測
+        公開原則量化檢查
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {items.map(([label, value]) => (
@@ -187,18 +181,12 @@ export function Dashboard() {
           signal.symbol.toLowerCase().includes(needle) ||
           signal.name.toLowerCase().includes(needle)),
     );
-    if (strategyFilter === "MA_CONVERGENCE") {
+    if (strategyFilter !== "ALL") {
       filtered.sort((left, right) => {
         const stageDifference =
           levelOrder[left.level] - levelOrder[right.level];
         if (stageDifference !== 0) return stageDifference;
-        const leftDistance = Math.abs(
-          metricNumber(left, "distance_to_breakout") ?? Number.POSITIVE_INFINITY,
-        );
-        const rightDistance = Math.abs(
-          metricNumber(right, "distance_to_breakout") ?? Number.POSITIVE_INFINITY,
-        );
-        return leftDistance - rightDistance || right.score - left.score;
+        return right.score - left.score || left.symbol.localeCompare(right.symbol);
       });
     }
     return filtered;
@@ -232,7 +220,7 @@ export function Dashboard() {
   const cards = [
     { label: "今日候選", value: summary?.total_signals ?? 0, tone: "text-white" },
     { label: "觀察", value: summary?.watch ?? 0, tone: "text-blue-300" },
-    { label: "試單", value: summary?.trial ?? 0, tone: "text-amber-300" },
+    { label: "轉強", value: summary?.trial ?? 0, tone: "text-amber-300" },
     { label: "確認", value: summary?.confirmed ?? 0, tone: "text-emerald-300" },
   ];
 
@@ -241,14 +229,14 @@ export function Dashboard() {
       !activeSelected ||
       activeSelected.entry_price === null ||
       activeSelected.stop_price === null ||
-      activeSelected.level === "WATCH"
+      activeSelected.level !== "CONFIRMED"
     ) {
       return 0;
     }
     const perShareRisk =
       activeSelected.entry_price - activeSelected.stop_price;
     if (perShareRisk <= 0) return 0;
-    const riskRate = activeSelected.level === "TRIAL" ? 0.005 : 0.01;
+    const riskRate = 0.01;
     return (
       Math.floor((capital * riskRate) / perShareRisk / 1000) * 1000
     );
@@ -266,7 +254,7 @@ export function Dashboard() {
             台股起漲雷達
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            均線糾結 × 盤整突破 × 強勢回檔｜規則透明、訊號可回測
+            多頭確認 × 回後買上漲 × 盤整突破｜依公開教學原則量化
           </p>
         </div>
         <div className="text-left text-xs leading-6 text-slate-400 sm:text-right">
@@ -388,19 +376,11 @@ export function Dashboard() {
                     </td>
                     <td className="px-4 py-3 text-slate-300">
                       <div>{strategyLabel[signal.strategy]}</div>
-                      {signal.strategy === "MA_CONVERGENCE" && (
-                        <div className="mt-1 whitespace-nowrap text-[11px] text-cyan-300/70">
-                          差距 {formatPercent(metricNumber(signal, "ma_spread"))}
-                          {" · "}
-                          {formatBreakoutDistance(signal)}
-                          {" · "}
-                          量縮{" "}
-                          {formatPercent(
-                            metricNumber(signal, "volume_contraction"),
-                            0,
-                          )}
-                        </div>
-                      )}
+                      <div className="mt-1 whitespace-nowrap text-[11px] text-cyan-300/70">
+                        壓力 {formatPrice(metricNumber(signal, "latest_peak"))}
+                        {" · "}
+                        防守 {formatPrice(metricNumber(signal, "latest_trough"))}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <LevelBadge level={signal.level} />
@@ -450,7 +430,7 @@ export function Dashboard() {
               <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/35">
                 <StockChart bars={bars} />
               </div>
-              <ConvergenceMetricsPanel signal={activeSelected} />
+              <TrendMetricsPanel signal={activeSelected} />
               <EntryTimingPanel signal={activeSelected} />
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {[
@@ -500,18 +480,16 @@ export function Dashboard() {
                 </div>
                 <div className="mt-3 flex items-end justify-between">
                   <div className="text-xs text-slate-500">
-                    {activeSelected.level === "TRIAL"
-                      ? "依 0.5% 風險試算"
-                      : activeSelected.level === "CONFIRMED"
-                        ? "依 1% 風險試算"
-                        : "觀察階段不配置部位"}
+                    {activeSelected.level === "CONFIRMED"
+                      ? "依 1% 帳戶風險試算"
+                      : "觀察／轉強階段不配置部位"}
                   </div>
                   <div className="text-lg font-bold text-emerald-300">
                     {positionShares.toLocaleString()} 股
                   </div>
                 </div>
               </div>
-              {backtest && (
+              {backtest && activeSelected.strategy !== "TREND_CONFIRMATION" && (
                 <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/35 p-3">
                   <div className="flex items-center justify-between">
                     <h2 className="text-xs font-semibold tracking-wider text-slate-400">
@@ -582,7 +560,7 @@ export function Dashboard() {
         </aside>
       </section>
       <footer className="py-6 text-center text-xs text-slate-600">
-        技術面研究工具，不構成投資建議。所有平台自訂門檻均需以樣本外回測驗證。
+        依公開教學原則進行平台量化轉譯，非官方授權或背書；不構成投資建議。
       </footer>
     </main>
   );

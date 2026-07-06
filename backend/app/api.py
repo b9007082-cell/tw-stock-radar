@@ -25,6 +25,7 @@ router = APIRouter(prefix="/api")
 
 
 def _signal_response(signal: Signal, instrument: Instrument) -> SignalResponse:
+    metrics = json.loads(signal.metrics_json)
     return SignalResponse(
         id=signal.id,
         symbol=instrument.symbol,
@@ -37,14 +38,20 @@ def _signal_response(signal: Signal, instrument: Instrument) -> SignalResponse:
         score=signal.score,
         close=float(signal.close),
         entry_price=float(signal.entry_price) if signal.entry_price is not None else None,
+        entry_zone_low=metrics.pop("_entry_zone_low", None),
+        entry_zone_high=metrics.pop("_entry_zone_high", None),
+        trigger_price=metrics.pop("_trigger_price", None),
         stop_price=float(signal.stop_price) if signal.stop_price is not None else None,
         risk_percent=(
             float(signal.risk_percent) if signal.risk_percent is not None else None
         ),
+        timing_status=metrics.pop("_timing_status", None),
+        timing_note=metrics.pop("_timing_note", None),
+        overheated=bool(metrics.pop("_overheated", False)),
         executable=signal.executable,
         validation_status="APPROVED" if signal.executable else "RESEARCH",
         reasons=json.loads(signal.reasons_json),
-        metrics=json.loads(signal.metrics_json),
+        metrics=metrics,
     )
 
 
@@ -135,8 +142,11 @@ def instrument_bars(
 def instrument_backtest(
     symbol: str,
     strategy: str = Query(
-        default="MA_CONVERGENCE",
-        pattern="^(MA_CONVERGENCE|CONSOLIDATION_BREAKOUT|STRONG_PULLBACK)$",
+        default="PULLBACK_RESUME",
+        pattern=(
+            "^(TREND_CONFIRMATION|PULLBACK_RESUME|"
+            "CONSOLIDATION_BREAKOUT)$"
+        ),
     ),
     session: Session = Depends(get_db),
 ) -> BacktestResponse:

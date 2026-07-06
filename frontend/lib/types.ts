@@ -23,7 +23,10 @@ export interface Signal {
   name: string;
   market: string;
   signal_date: string;
-  strategy: "MA_CONVERGENCE" | "CONSOLIDATION_BREAKOUT" | "STRONG_PULLBACK";
+  strategy:
+    | "TREND_CONFIRMATION"
+    | "PULLBACK_RESUME"
+    | "CONSOLIDATION_BREAKOUT";
   strategy_version: string;
   level: SignalLevel;
   score: number;

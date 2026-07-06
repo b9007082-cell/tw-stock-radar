@@ -11,7 +11,12 @@ class BacktestConfig:
     commission_rate: float = 0.001425
     sell_tax_rate: float = 0.003
     slippage_rate: float = 0.001
-    max_holding_days: int = 20
+
+
+def _net_return(entry: float, exit_price: float, config: BacktestConfig) -> float:
+    gross = (exit_price / entry) - 1
+    costs = config.commission_rate * 2 + config.sell_tax_rate
+    return gross - costs
 
 
 def backtest(
@@ -41,8 +46,7 @@ def backtest(
             actionable = [
                 item
                 for item in candidates
-                if item.level in {SignalLevel.TRIAL, SignalLevel.CONFIRMED}
-                and item.executable
+                if item.level == SignalLevel.CONFIRMED and item.executable
             ]
             if actionable:
                 selected = max(actionable, key=lambda item: item.score)
@@ -56,25 +60,26 @@ def backtest(
         else:
             entry = float(position["entry"])
             stop = float(position["stop"])
-            entry_index = int(position["entry_index"])
-            holding_days = index - entry_index
             ma20 = float(ma20s[index] or 0)
             exit_price: float | None = None
             if current.low <= stop:
                 exit_price = stop * (1 - config.slippage_rate)
-            elif current.close < ma20 or holding_days >= config.max_holding_days:
+            elif current.close < ma20:
                 exit_price = bars[index + 1].open * (1 - config.slippage_rate)
             if exit_price is not None:
-                gross = (exit_price / entry) - 1
-                costs = (
-                    config.commission_rate * 2
-                    + config.sell_tax_rate
-                )
-                net = gross - costs
+                net = _net_return(entry, exit_price, config)
                 trades.append(net)
                 equity *= 1 + net
                 equity_curve.append(equity)
                 position = None
+
+    if position is not None:
+        entry = float(position["entry"])
+        exit_price = bars[-1].close * (1 - config.slippage_rate)
+        net = _net_return(entry, exit_price, config)
+        trades.append(net)
+        equity *= 1 + net
+        equity_curve.append(equity)
 
     if not trades:
         return {

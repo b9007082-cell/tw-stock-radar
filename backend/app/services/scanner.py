@@ -110,6 +110,12 @@ def run_scan(session: Session, as_of: date | None = None) -> int:
                     metrics_json=json.dumps(
                         {
                             **result.metrics,
+                            "_entry_zone_low": result.entry_zone_low,
+                            "_entry_zone_high": result.entry_zone_high,
+                            "_trigger_price": result.trigger_price,
+                            "_timing_status": result.timing_status,
+                            "_timing_note": result.timing_note,
+                            "_overheated": result.overheated,
                             "risk_eligible": result.executable,
                             "strategy_approved": settings.strategy_approved,
                         },
