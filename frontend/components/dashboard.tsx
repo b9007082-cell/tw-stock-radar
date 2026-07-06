@@ -6,7 +6,9 @@ import { api } from "@/lib/api";
 import type {
   BacktestReport,
   Bar,
+  DailyRecommendations,
   EntryTimingStatus,
+  RecommendationItem,
   Signal,
   SignalLevel,
   Summary,
@@ -143,9 +145,78 @@ function EntryTimingPanel({ signal }: { signal: Signal }) {
   );
 }
 
+function RecommendationBoard({
+  title,
+  subtitle,
+  items,
+  accent,
+  onSelect,
+}: {
+  title: string;
+  subtitle: string;
+  items: RecommendationItem[];
+  accent: "emerald" | "cyan";
+  onSelect: (item: RecommendationItem) => void;
+}) {
+  const accentClass =
+    accent === "emerald" ? "text-emerald-300" : "text-cyan-300";
+  return (
+    <article className="overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/70 backdrop-blur">
+      <div className="border-b border-slate-800 px-4 py-3">
+        <div className={`text-sm font-bold ${accentClass}`}>{title}</div>
+        <div className="mt-1 text-xs text-slate-500">{subtitle}</div>
+      </div>
+      <div className="divide-y divide-slate-800">
+        {items.map((item) => {
+          const volumeRatio = metricNumber(item, "volume_ratio");
+          return (
+            <button
+              key={`${item.strategy}-${item.symbol}`}
+              type="button"
+              onClick={() => onSelect(item)}
+              className="grid w-full grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-800/70"
+            >
+              <span className={`text-lg font-black ${accentClass}`}>
+                {item.rank}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-white">
+                  {item.symbol} {item.name}
+                </span>
+                <span className="mt-1 flex flex-wrap gap-x-2 text-[11px] text-slate-500">
+                  <span>{levelLabel[item.level]}</span>
+                  <span>風險 {item.structure_risk_percent.toFixed(1)}%</span>
+                  <span>
+                    {item.strategy === "PULLBACK_RESUME"
+                      ? `${item.reward_risk_ratio?.toFixed(2) ?? "—"}R`
+                      : `量比 ${volumeRatio?.toFixed(2) ?? "—"}倍`}
+                  </span>
+                </span>
+              </span>
+              <span className="text-right">
+                <span className={`block text-lg font-bold ${accentClass}`}>
+                  {item.recommendation_score.toFixed(1)}
+                </span>
+                <span className="text-[10px] text-slate-600">推薦分</span>
+              </span>
+            </button>
+          );
+        })}
+        {items.length === 0 && (
+          <div className="px-4 py-8 text-center text-sm text-slate-500">
+            今日沒有通過風險與獲利空間門檻的股票。
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
 export function Dashboard() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [signals, setSignals] = useState<Signal[]>([]);
+  const [recommendations, setRecommendations] =
+    useState<DailyRecommendations | null>(null);
   const [selected, setSelected] = useState<Signal | null>(null);
   const [bars, setBars] = useState<Bar[]>([]);
   const [backtest, setBacktest] = useState<BacktestReport | null>(null);
@@ -159,10 +230,11 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([api.summary(), api.signals()])
-      .then(([summaryData, signalData]) => {
+    Promise.all([api.summary(), api.signals(), api.recommendations()])
+      .then(([summaryData, signalData, recommendationData]) => {
         setSummary(summaryData);
         setSignals(signalData);
+        setRecommendations(recommendationData);
         setSelected(signalData[0] ?? null);
       })
       .catch((reason: unknown) =>
@@ -223,6 +295,13 @@ export function Dashboard() {
     { label: "轉強", value: summary?.trial ?? 0, tone: "text-amber-300" },
     { label: "確認", value: summary?.confirmed ?? 0, tone: "text-emerald-300" },
   ];
+
+  const selectRecommendation = (item: RecommendationItem) => {
+    setStrategyFilter(item.strategy);
+    setFilter("ALL");
+    setQuery("");
+    setSelected(item);
+  };
 
   const positionShares = useMemo(() => {
     if (
@@ -295,6 +374,23 @@ export function Dashboard() {
             </div>
           </article>
         ))}
+      </section>
+
+      <section className="mb-5 grid gap-4 lg:grid-cols-2">
+        <RecommendationBoard
+          title="回後買上漲 Top 10"
+          subtitle="確認優先｜風險 ≤ 8%｜前高空間 ≥ 1.5R"
+          items={recommendations?.pullback_resume ?? []}
+          accent="emerald"
+          onSelect={selectRecommendation}
+        />
+        <RecommendationBoard
+          title="盤整突破 Top 10"
+          subtitle="確認優先｜風險 ≤ 8%｜量能與突破距離排序"
+          items={recommendations?.consolidation_breakout ?? []}
+          accent="cyan"
+          onSelect={selectRecommendation}
+        />
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(420px,0.75fr)]">

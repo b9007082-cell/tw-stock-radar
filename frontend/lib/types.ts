@@ -46,6 +46,21 @@ export interface Signal {
   metrics: Record<string, number | string | boolean>;
 }
 
+export interface RecommendationItem extends Signal {
+  rank: number;
+  recommendation_score: number;
+  structure_risk_percent: number;
+  reward_risk_ratio: number | null;
+  ranking_reasons: string[];
+}
+
+export interface DailyRecommendations {
+  as_of: string | null;
+  ranking_version: string;
+  pullback_resume: RecommendationItem[];
+  consolidation_breakout: RecommendationItem[];
+}
+
 export interface Bar {
   trade_date: string;
   open: number;

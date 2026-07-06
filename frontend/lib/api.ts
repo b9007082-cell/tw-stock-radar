@@ -1,4 +1,10 @@
-import type { BacktestReport, Bar, Signal, Summary } from "@/lib/types";
+import type {
+  BacktestReport,
+  Bar,
+  DailyRecommendations,
+  Signal,
+  Summary,
+} from "@/lib/types";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -34,6 +40,10 @@ export const api = {
     DATA_MODE === "static"
       ? getStaticJson<Signal[]>("signals.json")
       : getJson<Signal[]>("/api/signals"),
+  recommendations: () =>
+    DATA_MODE === "static"
+      ? getStaticJson<DailyRecommendations>("recommendations.json")
+      : getJson<DailyRecommendations>("/api/recommendations"),
   bars: (symbol: string) =>
     DATA_MODE === "static"
       ? getStaticJson<Bar[]>(`bars/${encodeURIComponent(symbol)}.json`)

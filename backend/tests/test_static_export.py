@@ -57,11 +57,19 @@ def test_static_export_produces_deterministic_contract(tmp_path) -> None:
 
     summary = json.loads((output_dir / "summary.json").read_text("utf-8"))
     signals = json.loads((output_dir / "signals.json").read_text("utf-8"))
+    recommendations = json.loads(
+        (output_dir / "recommendations.json").read_text("utf-8")
+    )
     assert first == second
     assert (output_dir / "manifest.json").read_bytes() == first_manifest_bytes
     assert first["trading_days"] == 70
     assert summary["instruments"] == 3
     assert isinstance(signals, list)
+    assert recommendations["as_of"] == latest_date.isoformat()
+    assert recommendations["ranking_version"] == "2026.07.r1"
+    assert "recommendations.json" in first["checksums"]
+    assert isinstance(recommendations["pullback_resume"], list)
+    assert isinstance(recommendations["consolidation_breakout"], list)
     for signal in signals:
         backtest_path = (
             output_dir

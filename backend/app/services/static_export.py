@@ -15,6 +15,10 @@ from app.config import get_settings
 from app.domain import Bar
 from app.services.backtest import backtest
 from app.services.history_store import DataQualityError, read_snapshot
+from app.services.recommendations import (
+    RECOMMENDATION_VERSION,
+    build_recommendations,
+)
 from app.services.strategies import scan_bars
 
 
@@ -187,6 +191,11 @@ def export_static_data(
     signals.sort(key=lambda item: (-int(item["score"]), str(item["symbol"])))
     for index, signal in enumerate(signals, start=1):
         signal["id"] = index
+    recommendations = {
+        "as_of": scan_date.isoformat(),
+        "ranking_version": RECOMMENDATION_VERSION,
+        **build_recommendations(signals),
+    }
 
     counts = {
         level: sum(signal["level"] == level for signal in signals)
@@ -209,6 +218,11 @@ def export_static_data(
     try:
         checksums["summary.json"] = _write_json(staging, "summary.json", summary)
         checksums["signals.json"] = _write_json(staging, "signals.json", signals)
+        checksums["recommendations.json"] = _write_json(
+            staging,
+            "recommendations.json",
+            recommendations,
+        )
         for symbol in sorted(candidate_symbols):
             bars = eligible[symbol]
             bar_payload = [
@@ -255,11 +269,21 @@ def export_static_data(
             shutil.rmtree(backup)
         if output_dir.exists():
             output_dir.replace(backup)
-        staging.replace(output_dir)
+        try:
+            staging.replace(output_dir)
+        except PermissionError:
+            # Windows can reject replacing a directory even when the target no
+            # longer exists. Copying the completed staging tree preserves the
+            # validated payload while the backup remains available.
+            shutil.copytree(staging, output_dir)
+            shutil.rmtree(staging)
         if backup.exists():
             shutil.rmtree(backup)
         return manifest
     except Exception:
         if staging.exists():
             shutil.rmtree(staging)
+        backup = output_dir.with_name(f"{output_dir.name}.backup")
+        if not output_dir.exists() and backup.exists():
+            backup.replace(output_dir)
         raise

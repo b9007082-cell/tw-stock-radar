@@ -12,10 +12,15 @@ from app.schemas import (
     BacktestResponse,
     BarResponse,
     JobResponse,
+    RecommendationsResponse,
     SignalResponse,
     SummaryResponse,
 )
 from app.services.backtest import backtest
+from app.services.recommendations import (
+    RECOMMENDATION_VERSION,
+    build_recommendations,
+)
 from app.services.scanner import _load_bars
 from app.services.demo_data import seed_demo
 from app.services.market_data import OfficialSnapshotClient, upsert_market_rows
@@ -102,6 +107,41 @@ def signals(
         query.order_by(Signal.score.desc(), Instrument.symbol).limit(limit)
     ).all()
     return [_signal_response(signal, instrument) for signal, instrument in rows]
+
+
+@router.get("/recommendations", response_model=RecommendationsResponse)
+def recommendations(
+    session: Session = Depends(get_db),
+) -> RecommendationsResponse:
+    latest = session.scalar(select(func.max(Signal.signal_date)))
+    if latest is None:
+        return RecommendationsResponse(
+            as_of=None,
+            ranking_version=RECOMMENDATION_VERSION,
+            pullback_resume=[],
+            consolidation_breakout=[],
+        )
+    rows = session.execute(
+        select(Signal, Instrument)
+        .join(Instrument, Signal.instrument_id == Instrument.id)
+        .where(
+            Signal.signal_date == latest,
+            Signal.strategy.in_(
+                ["PULLBACK_RESUME", "CONSOLIDATION_BREAKOUT"]
+            ),
+        )
+    ).all()
+    payload = [
+        _signal_response(signal, instrument).model_dump(mode="json")
+        for signal, instrument in rows
+    ]
+    ranked = build_recommendations(payload)
+    return RecommendationsResponse(
+        as_of=latest,
+        ranking_version=RECOMMENDATION_VERSION,
+        pullback_resume=ranked["pullback_resume"],
+        consolidation_breakout=ranked["consolidation_breakout"],
+    )
 
 
 @router.get("/instruments/{symbol}/bars", response_model=list[BarResponse])

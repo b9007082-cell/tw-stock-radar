@@ -7,6 +7,8 @@
 - `盤整突破`：多頭趨勢中，收盤突破最近確認波峰，成交量大於 20 日均量。
 - `WATCH`（方向或條件觀察）、`TRIAL`（正在轉強但尚未確認）、`CONFIRMED`（買點確認）三級訊號。
 - 只有 `CONFIRMED` 才會顯示可執行進場區；結構停損設在最近確認波谷。
+- 每日另產生「回後買上漲 Top 10」及「盤整突破 Top 10」；納入轉強與確認訊號，但確認固定優先。
+- Top 10 排除結構風險超過 8%的股票；回後買上漲另要求到前高至少保有 1.5R 空間。
 
 > 多頭方向成立、跌破後站回 5 日線，或盤中突破，都不單獨視為買點；必須等各策略的收盤確認條件完整成立。
 
@@ -66,6 +68,8 @@ npm run build:pages
 ```
 
 靜態輸出位於 `frontend/out/`。Pages 使用 `/tw-stock-radar` base path；本機 FastAPI 模式仍可使用原本的 `npm run dev`。
+
+每日推薦榜單位於 `frontend/public/data/recommendations.json`，會隨每日排程及網站「立即更新資料」一併重算。若嚴格條件下不足 10 檔，網站只顯示實際符合數量，不放寬風險門檻湊數。
 
 ## 技術架構
 
@@ -186,6 +190,7 @@ npm audit --omit=dev
 data/raw/YYYY-MM-DD.json.gz       六個月官方行情日檔
 data/state/manifest.json          日期、筆數與 checksum
 frontend/public/data/             網站使用的最新訊號與候選 K 線
+frontend/public/data/recommendations.json  每日兩套 Top 10
 frontend/out/                     GitHub Pages build artifact
 ```
 

@@ -29,6 +29,21 @@ class SignalResponse(BaseModel):
     metrics: dict[str, float | str | bool]
 
 
+class RecommendationItemResponse(SignalResponse):
+    rank: int
+    recommendation_score: float
+    structure_risk_percent: float
+    reward_risk_ratio: float | None
+    ranking_reasons: list[str]
+
+
+class RecommendationsResponse(BaseModel):
+    as_of: date | None
+    ranking_version: str
+    pullback_resume: list[RecommendationItemResponse]
+    consolidation_breakout: list[RecommendationItemResponse]
+
+
 class BarResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
