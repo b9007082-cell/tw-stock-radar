@@ -13,6 +13,8 @@ import type {
 } from "@/lib/types";
 import { StockChart } from "@/components/stock-chart";
 
+const updateWorkerUrl = process.env.NEXT_PUBLIC_UPDATE_WORKER_URL ?? "";
+
 const levelLabel: Record<SignalLevel, string> = {
   WATCH: "觀察",
   TRIAL: "試單",
@@ -186,6 +188,16 @@ export function Dashboard() {
             驗證狀態：
             {summary?.strategy_approved ? " 已核准" : " 研究版"}
           </div>
+          {updateWorkerUrl && (
+            <a
+              href={updateWorkerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center rounded-lg border border-emerald-300/30 bg-emerald-300/10 px-3 py-1.5 font-semibold text-emerald-200 transition hover:bg-emerald-300/20"
+            >
+              立即更新資料
+            </a>
+          )}
         </div>
       </header>
 

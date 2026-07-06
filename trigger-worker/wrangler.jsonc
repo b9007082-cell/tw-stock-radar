@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tw-stock-radar-update",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-06",
+  "workers_dev": true,
+  "vars": {
+    "GITHUB_OWNER": "b9007082-cell",
+    "GITHUB_REPO": "tw-stock-radar",
+    "GITHUB_WORKFLOW": "update-data.yml",
+    "GITHUB_REF": "main",
+    "RADAR_URL": "https://b9007082-cell.github.io/tw-stock-radar/"
+  }
+}

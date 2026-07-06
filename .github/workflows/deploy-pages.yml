@@ -48,7 +48,25 @@ jobs:
           python -m app.cli export-static
           git diff --exit-code -- frontend/public/data
 
-      - name: Set up Node
+      - name: Set up Node for Worker
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: trigger-worker/package-lock.json
+
+      - name: Install Worker dependencies
+        working-directory: trigger-worker
+        run: npm ci
+
+      - name: Verify Worker
+        working-directory: trigger-worker
+        run: |
+          npm test
+          npm run typecheck
+          npm audit
+
+      - name: Set up Node for frontend
         uses: actions/setup-node@v6
         with:
           node-version: "20"
@@ -65,6 +83,8 @@ jobs:
 
       - name: Build static site
         working-directory: frontend
+        env:
+          NEXT_PUBLIC_UPDATE_WORKER_URL: ${{ vars.UPDATE_WORKER_URL }}
         run: npm run build:pages
 
       - name: Configure Pages
@@ -86,4 +106,3 @@ jobs:
       - name: Deploy GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-

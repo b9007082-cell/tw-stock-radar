@@ -27,6 +27,33 @@ GitHub Actions：
 - `Deploy GitHub Pages`：測試、lint、靜態建置並部署 Pages。
 - 兩個 workflow 均支援手動執行；首次可勾選 `backfill` 回補六個月。
 
+### 一鍵手動更新
+
+網站可透過 Cloudflare Access 保護的 Worker 安全觸發
+`Update market data`，不會把 GitHub Token 暴露在 Pages：
+
+```powershell
+cd trigger-worker
+npm install
+npm test
+npm run typecheck
+npm run deploy
+```
+
+Worker 開發與部署需要 Node.js 22 以上。
+
+Worker 需要以下 Secret：
+
+- `GITHUB_TOKEN`：僅限本儲存庫且只有 `Actions: write` 的 Fine-grained PAT。
+- `ACCESS_TEAM_DOMAIN`：Cloudflare Access team domain。
+- `ACCESS_AUD`：Access application audience。
+- `ALLOWED_EMAIL`：唯一允許觸發更新的 Email。
+
+部署後在 GitHub repository variable 設定
+`UPDATE_WORKER_URL=https://<worker>.<account>.workers.dev/`。Pages
+重新建置後會在資料日期旁顯示「立即更新資料」按鈕。Worker
+會拒絕未通過 Access、Email 不符、已有工作執行中或五分鐘內重複觸發的請求。
+
 ### 本機產生 Pages 資料
 
 ```powershell

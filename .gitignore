@@ -13,4 +13,7 @@ data/*.sqlite*
 frontend/.next/
 frontend/node_modules/
 frontend/out/
+trigger-worker/node_modules/
+trigger-worker/.wrangler/
+trigger-worker/.dev.vars
 *.log
