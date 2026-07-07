@@ -31,7 +31,6 @@ const strategyLabel: Record<Signal["strategy"], string> = {
 
 const strategyTabs = [
   ["ALL", "全部策略"],
-  ["TREND_CONFIRMATION", "多頭確認"],
   ["PULLBACK_RESUME", "回後買上漲"],
   ["CONSOLIDATION_BREAKOUT", "盤整突破"],
 ] as const;
@@ -145,6 +144,10 @@ function EntryTimingPanel({ signal }: { signal: Signal }) {
   );
 }
 
+function visibleReasons(signal: Signal) {
+  return signal.reasons.filter((reason) => !reason.startsWith("多頭確認"));
+}
+
 function RecommendationBoard({
   title,
   subtitle,
@@ -247,6 +250,7 @@ export function Dashboard() {
     const needle = query.trim().toLowerCase();
     const filtered = signals.filter(
       (signal) =>
+        signal.strategy !== "TREND_CONFIRMATION" &&
         (strategyFilter === "ALL" || signal.strategy === strategyFilter) &&
         (filter === "ALL" || signal.level === filter) &&
         (!needle ||
@@ -333,7 +337,7 @@ export function Dashboard() {
             台股起漲雷達
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            多頭確認 × 回後買上漲 × 盤整突破｜依公開教學原則量化
+            回後買上漲 × 盤整突破｜依公開教學原則量化
           </p>
         </div>
         <div className="text-left text-xs leading-6 text-slate-400 sm:text-right">
@@ -631,7 +635,7 @@ export function Dashboard() {
                   訊號依據
                 </h2>
                 <ul className="mt-3 space-y-2">
-                  {activeSelected.reasons.map((reason) => (
+                  {visibleReasons(activeSelected).map((reason) => (
                     <li
                       key={reason}
                       className="flex gap-2 text-sm leading-6 text-slate-300"
