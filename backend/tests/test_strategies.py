@@ -40,8 +40,9 @@ def _pullback_bars(level: SignalLevel) -> list[Bar]:
         closes.append(87.3)
     else:
         closes.append(87.6)
-    for close in closes:
-        bars.append(_bar(len(bars), close, 800_000))
+    for index, close in enumerate(closes):
+        volume = 900_000 if index == len(closes) - 1 and level != SignalLevel.WATCH else 800_000
+        bars.append(_bar(len(bars), close, volume))
     return bars
 
 
@@ -95,6 +96,7 @@ def test_pullback_watch_stays_above_ma20() -> None:
     assert signal.level == SignalLevel.WATCH
     assert signal.executable is False
     assert signal.metrics["held_ma20"] is True
+    assert signal.metrics["pullback_volume_contracting"] is True
 
 
 def test_pullback_trial_is_not_actionable() -> None:
@@ -104,6 +106,7 @@ def test_pullback_trial_is_not_actionable() -> None:
     assert signal.executable is False
     assert signal.metrics["back_above_ma5"] is True
     assert signal.metrics["broke_previous_high"] is False
+    assert signal.metrics["rebound_volume_expanding"] is True
 
 
 def test_pullback_resume_is_confirmed_after_previous_high_break() -> None:
@@ -115,6 +118,8 @@ def test_pullback_resume_is_confirmed_after_previous_high_break() -> None:
     assert signal.entry_zone_high == signal.close
     assert signal.stop_price is not None
     assert signal.stop_price < signal.entry_price
+    assert signal.metrics["pullback_volume_ratio"] < 1
+    assert signal.metrics["rebound_volume_ratio"] > 1
 
 
 def test_pullback_below_ma20_is_rejected() -> None:
@@ -132,12 +137,44 @@ def test_pullback_below_ma20_is_rejected() -> None:
     assert pullback_resume_signal(bars) is None
 
 
+def test_pullback_without_volume_contraction_is_rejected() -> None:
+    bars = _pullback_bars(SignalLevel.CONFIRMED)
+    for index in range(65, len(bars) - 1):
+        original = bars[index]
+        bars[index] = Bar(
+            date=original.date,
+            open=original.open,
+            high=original.high,
+            low=original.low,
+            close=original.close,
+            volume=1_200_000,
+            turnover=original.turnover,
+        )
+    assert pullback_resume_signal(bars) is None
+
+
+def test_pullback_without_rebound_volume_expansion_is_rejected() -> None:
+    bars = _pullback_bars(SignalLevel.CONFIRMED)
+    original = bars[-1]
+    bars[-1] = Bar(
+        date=original.date,
+        open=original.open,
+        high=original.high,
+        low=original.low,
+        close=original.close,
+        volume=700_000,
+        turnover=original.turnover,
+    )
+    assert pullback_resume_signal(bars) is None
+
+
 def test_consolidation_watch_uses_latest_confirmed_peak() -> None:
     signal = consolidation_signal(_breakout_bars(SignalLevel.WATCH))
     assert signal is not None
     assert signal.level == SignalLevel.WATCH
     assert signal.trigger_price == round(float(signal.metrics["latest_peak"]), 2)
     assert signal.executable is False
+    assert signal.metrics["volume_contracting"] is True
 
 
 def test_intraday_breakout_without_close_is_trial_only() -> None:
@@ -153,6 +190,39 @@ def test_close_breakout_with_volume_is_confirmed() -> None:
     assert signal.level == SignalLevel.CONFIRMED
     assert signal.executable is True
     assert signal.metrics["volume_confirmed"] is True
+    assert signal.metrics["consolidation_volume_ratio"] < 1
+    assert signal.metrics["breakout_volume_ratio"] > 1.2
+
+
+def test_consolidation_without_volume_contraction_is_rejected() -> None:
+    bars = _breakout_bars(SignalLevel.CONFIRMED)
+    for index in range(len(bars) - 21, len(bars) - 1):
+        original = bars[index]
+        bars[index] = Bar(
+            date=original.date,
+            open=original.open,
+            high=original.high,
+            low=original.low,
+            close=original.close,
+            volume=1_300_000,
+            turnover=original.turnover,
+        )
+    assert consolidation_signal(bars) is None
+
+
+def test_consolidation_without_breakout_volume_is_rejected() -> None:
+    bars = _breakout_bars(SignalLevel.CONFIRMED)
+    original = bars[-1]
+    bars[-1] = Bar(
+        date=original.date,
+        open=original.open,
+        high=original.high,
+        low=original.low,
+        close=original.close,
+        volume=900_000,
+        turnover=original.turnover,
+    )
+    assert consolidation_signal(bars) is None
 
 
 def test_scan_keeps_direction_and_buy_point_signals() -> None:

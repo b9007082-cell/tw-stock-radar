@@ -6,6 +6,8 @@ from app.services.indicators import confirmed_swings, percent_change, sma
 
 
 MIN_BARS = 65
+BREAKOUT_VOLUME_MULTIPLE = 1.2
+MAX_VOLUME_CONTRACTION_RATIO = 1.0
 
 
 @dataclass(frozen=True)
@@ -64,6 +66,10 @@ def _trend_context(bars: Sequence[Bar]) -> TrendContext | None:
         latest_trough=float(troughs[-1][1]),
         confirmed=confirmed,
     )
+
+
+def _average(values: Sequence[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
 
 
 def _metrics(context: TrendContext) -> dict[str, float | bool]:
@@ -194,25 +200,61 @@ def pullback_resume_signal(
 
     latest = bars[-1]
     previous = bars[-2]
+    pullback_volume_indexes = list(range(start, max(start, len(bars) - 1)))
+    if not pullback_volume_indexes:
+        return None
+    previous_volume_start = max(0, start - len(pullback_volume_indexes))
+    previous_volume_indexes = list(range(previous_volume_start, start))
+    if len(previous_volume_indexes) != len(pullback_volume_indexes):
+        return None
+    pullback_volume_avg = _average(
+        [float(bars[index].volume) for index in pullback_volume_indexes]
+    )
+    previous_volume_avg = _average(
+        [float(bars[index].volume) for index in previous_volume_indexes]
+    )
+    pullback_volume_ratio = (
+        pullback_volume_avg / previous_volume_avg if previous_volume_avg else 0.0
+    )
+    pullback_volume_contracting = (
+        0 < pullback_volume_ratio < MAX_VOLUME_CONTRACTION_RATIO
+    )
+    rebound_volume_ratio = (
+        float(latest.volume) / pullback_volume_avg if pullback_volume_avg else 0.0
+    )
+    rebound_volume_expanding = rebound_volume_ratio > 1.0
+    if not pullback_volume_contracting:
+        return None
+
     back_above_ma5 = latest.close > context.ma5
     broke_previous_high = latest.close > previous.high
     if back_above_ma5 and broke_previous_high:
+        if not rebound_volume_expanding:
+            return None
         level = SignalLevel.CONFIRMED
         timing_status = "READY"
         timing_note = (
             "回檔守住20日線後，收盤站回5日線並突破前一日高點，"
-            "回後買上漲買點成立。"
+            "且轉強量大於回檔均量，回後買上漲買點成立。"
         )
         score = 92
     elif back_above_ma5:
+        if not rebound_volume_expanding:
+            return None
         level = SignalLevel.TRIAL
         timing_status = "TRIAL_ENTRY"
-        timing_note = "已站回5日線但尚未突破前一日高點，只視為轉強中。"
+        timing_note = (
+            "已站回5日線且轉強量大於回檔均量，"
+            "但尚未突破前一日高點，只視為轉強中。"
+        )
         score = 80
     else:
         level = SignalLevel.WATCH
         timing_status = "WAIT_PULLBACK"
-        timing_note = "多頭回檔仍守20日線，等待站回5日線並突破前一日高點。"
+        timing_note = (
+            "多頭回檔仍守20日線且回檔量縮，"
+            "等待站回5日線並突破前一日高點。"
+        )
         score = 70
 
     return _signal(
@@ -227,8 +269,9 @@ def pullback_resume_signal(
         reasons=[
             "多頭確認：頭頭高、底底高",
             "回檔期間收盤守在20日線之上",
+            f"回檔均量為前段均量的 {pullback_volume_ratio:.2f} 倍",
             (
-                "收盤站回5日線並突破前一日高點"
+                "收盤站回5日線並突破前一日高點，且轉強量大於回檔均量"
                 if level == SignalLevel.CONFIRMED
                 else "等待回檔後重新轉強"
             ),
@@ -239,6 +282,12 @@ def pullback_resume_signal(
             "held_ma20": held_ma20,
             "back_above_ma5": back_above_ma5,
             "broke_previous_high": broke_previous_high,
+            "pullback_volume_avg": pullback_volume_avg,
+            "previous_advance_volume_avg": previous_volume_avg,
+            "pullback_volume_ratio": pullback_volume_ratio,
+            "pullback_volume_contracting": pullback_volume_contracting,
+            "rebound_volume_ratio": rebound_volume_ratio,
+            "rebound_volume_expanding": rebound_volume_expanding,
         },
     )
 
@@ -255,12 +304,36 @@ def consolidation_signal(
         return None
     latest = bars[-1]
     trigger = context.latest_peak
-    volume_confirmed = latest.volume > context.vol20
+    prior_consolidation_volumes = [float(bar.volume) for bar in bars[-21:-1]]
+    previous_volumes = [float(bar.volume) for bar in bars[-41:-21]]
+    consolidation_volume_avg = _average(prior_consolidation_volumes)
+    previous_volume_avg = _average(previous_volumes)
+    consolidation_volume_ratio = (
+        consolidation_volume_avg / previous_volume_avg
+        if previous_volume_avg
+        else 0.0
+    )
+    volume_contracting = (
+        len(prior_consolidation_volumes) == 20
+        and len(previous_volumes) == 20
+        and 0 < consolidation_volume_ratio < MAX_VOLUME_CONTRACTION_RATIO
+    )
+    breakout_volume_ratio = (
+        float(latest.volume) / consolidation_volume_avg
+        if consolidation_volume_avg
+        else 0.0
+    )
+    volume_confirmed = (
+        volume_contracting and breakout_volume_ratio > BREAKOUT_VOLUME_MULTIPLE
+    )
+    if not volume_contracting:
+        return None
     if latest.close > trigger and volume_confirmed:
         level = SignalLevel.CONFIRMED
         timing_status = "READY"
         timing_note = (
-            "收盤突破最近確認壓力，且成交量高於20日均量，"
+            "整理期間量縮後，收盤突破最近確認壓力，"
+            "且成交量高於整理均量1.2倍，"
             "盤整突破買點成立。"
         )
         score = 94
@@ -289,15 +362,21 @@ def consolidation_signal(
         reasons=[
             "多頭確認：頭頭高、底底高",
             "最近確認波谷晚於最近確認波峰，整理結構完整",
+            f"整理均量為前段均量的 {consolidation_volume_ratio:.2f} 倍",
             (
-                "收盤突破最近確認壓力且成交量高於20日均量"
+                "收盤突破最近確認壓力且成交量高於整理均量1.2倍"
                 if level == SignalLevel.CONFIRMED
                 else "等待收盤站穩最近確認壓力"
             ),
         ],
         extra_metrics={
-            "volume_ratio": latest.volume / (context.vol20 or 1),
+            "volume_ratio": breakout_volume_ratio,
             "volume_confirmed": volume_confirmed,
+            "consolidation_volume_avg": consolidation_volume_avg,
+            "previous_volume_avg": previous_volume_avg,
+            "consolidation_volume_ratio": consolidation_volume_ratio,
+            "volume_contracting": volume_contracting,
+            "breakout_volume_ratio": breakout_volume_ratio,
         },
     )
 

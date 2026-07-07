@@ -13,6 +13,7 @@ def _signal(
     slope: float = 0.03,
     volume_ratio: float = 1.5,
     trigger: float = 99.0,
+    extra_metrics: dict | None = None,
 ) -> dict:
     return {
         "id": int(symbol),
@@ -43,6 +44,7 @@ def _signal(
             "ma5": ma5,
             "ma20_slope_5d": slope,
             "volume_ratio": volume_ratio,
+            **(extra_metrics or {}),
         },
     }
 
@@ -144,3 +146,26 @@ def test_unknown_fields_do_not_change_snapshot_ranking() -> None:
     )["consolidation_breakout"][0]
     assert baseline["rank"] == changed["rank"]
     assert baseline["recommendation_score"] == changed["recommendation_score"]
+
+
+def test_ranking_reasons_include_volume_contraction_metrics() -> None:
+    pullback = _signal(
+        "1001",
+        "PULLBACK_RESUME",
+        extra_metrics={
+            "pullback_volume_ratio": 0.72,
+            "rebound_volume_ratio": 1.18,
+        },
+    )
+    breakout = _signal(
+        "2001",
+        "CONSOLIDATION_BREAKOUT",
+        extra_metrics={"consolidation_volume_ratio": 0.68},
+    )
+    result = build_recommendations([pullback, breakout])
+    assert "回檔量縮 0.72倍" in result["pullback_resume"][0]["ranking_reasons"]
+    assert "轉強量 1.18倍" in result["pullback_resume"][0]["ranking_reasons"]
+    assert (
+        "整理量縮 0.68倍"
+        in result["consolidation_breakout"][0]["ranking_reasons"]
+    )

@@ -76,6 +76,12 @@ def _pullback_score(
         f"結構風險 {risk_percent:.2f}%",
         f"距5MA {distance_above_ma5 * 100:.2f}%",
     ]
+    pullback_volume_ratio = _number(metrics.get("pullback_volume_ratio"))
+    rebound_volume_ratio = _number(metrics.get("rebound_volume_ratio"))
+    if pullback_volume_ratio is not None:
+        reasons.append(f"回檔量縮 {pullback_volume_ratio:.2f}倍")
+    if rebound_volume_ratio is not None:
+        reasons.append(f"轉強量 {rebound_volume_ratio:.2f}倍")
     return round(score, 1), round(reward_risk, 2), reasons
 
 
@@ -112,6 +118,9 @@ def _breakout_score(
         distance_label,
         f"結構風險 {risk_percent:.2f}%",
     ]
+    consolidation_volume_ratio = _number(metrics.get("consolidation_volume_ratio"))
+    if consolidation_volume_ratio is not None:
+        reasons.append(f"整理量縮 {consolidation_volume_ratio:.2f}倍")
     return round(score, 1), reasons
 
 
