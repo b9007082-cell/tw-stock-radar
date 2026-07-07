@@ -198,9 +198,6 @@ function RecommendationBoard({
                   {item.recommendation_score.toFixed(1)}
                 </span>
                 <span className="text-[10px] text-slate-600">推薦分</span>
-                <span className="mt-1 block text-[10px] text-slate-500">
-                  點擊看資訊
-                </span>
               </span>
             </button>
           );
@@ -221,8 +218,6 @@ export function Dashboard() {
   const [recommendations, setRecommendations] =
     useState<DailyRecommendations | null>(null);
   const [selected, setSelected] = useState<Signal | null>(null);
-  const [recommendationInfo, setRecommendationInfo] =
-    useState<RecommendationItem | null>(null);
   const [bars, setBars] = useState<Bar[]>([]);
   const [backtest, setBacktest] = useState<BacktestReport | null>(null);
   const [capital, setCapital] = useState(1_000_000);
@@ -306,7 +301,6 @@ export function Dashboard() {
     setFilter("ALL");
     setQuery("");
     setSelected(item);
-    setRecommendationInfo(item);
   };
 
   const positionShares = useMemo(() => {
@@ -664,108 +658,6 @@ export function Dashboard() {
       <footer className="py-6 text-center text-xs text-slate-600">
         依公開教學原則進行平台量化轉譯，非官方授權或背書；不構成投資建議。
       </footer>
-
-      {recommendationInfo && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/80 px-3 py-4 backdrop-blur-sm sm:items-center"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${recommendationInfo.symbol} ${recommendationInfo.name} 排名資訊`}
-          onClick={() => setRecommendationInfo(null)}
-        >
-          <article
-            className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
-              <div>
-                <div className="text-xs font-bold tracking-[0.2em] text-emerald-300">
-                  TOP {recommendationInfo.rank} 推薦資訊
-                </div>
-                <h2 className="mt-2 text-2xl font-black text-white">
-                  {recommendationInfo.symbol} {recommendationInfo.name}
-                </h2>
-                <div className="mt-1 text-sm text-slate-400">
-                  {strategyLabel[recommendationInfo.strategy]} ·{" "}
-                  {recommendationInfo.signal_date}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRecommendationInfo(null)}
-                className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800"
-              >
-                關閉
-              </button>
-            </div>
-            <div className="p-5">
-              <div className="mb-4 flex flex-wrap items-center gap-2">
-                <LevelBadge level={recommendationInfo.level} />
-                <span
-                  className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${timingStyle[getTimingStatus(recommendationInfo)]}`}
-                >
-                  {timingLabel[getTimingStatus(recommendationInfo)]}
-                </span>
-                <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2.5 py-1 text-xs font-semibold text-cyan-200">
-                  推薦分 {recommendationInfo.recommendation_score.toFixed(1)}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {[
-                  ["收盤價", formatPrice(recommendationInfo.close)],
-                  ["建議進場區", formatEntryZone(recommendationInfo)],
-                  ["確認價", formatPrice(recommendationInfo.trigger_price)],
-                  ["防守價", formatPrice(recommendationInfo.stop_price)],
-                  [
-                    "結構風險",
-                    `${recommendationInfo.structure_risk_percent.toFixed(1)}%`,
-                  ],
-                  [
-                    "獲利風險比",
-                    recommendationInfo.reward_risk_ratio == null
-                      ? "—"
-                      : `${recommendationInfo.reward_risk_ratio.toFixed(2)}R`,
-                  ],
-                  [
-                    "壓力",
-                    formatPrice(metricNumber(recommendationInfo, "latest_peak")),
-                  ],
-                  [
-                    "支撐",
-                    formatPrice(metricNumber(recommendationInfo, "latest_trough")),
-                  ],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-xl bg-slate-950/50 p-3">
-                    <div className="text-[11px] text-slate-500">{label}</div>
-                    <div className="mt-1 font-semibold text-slate-100">
-                      {value}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/35 p-3">
-                <div className="text-xs font-bold tracking-wider text-slate-400">
-                  排名原因
-                </div>
-                <ul className="mt-3 space-y-2">
-                  {recommendationInfo.ranking_reasons.map((reason) => (
-                    <li
-                      key={reason}
-                      className="flex gap-2 text-sm leading-6 text-slate-300"
-                    >
-                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-300" />
-                      {reason}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <p className="mt-4 text-xs leading-5 text-amber-100/70">
-                這是依每日資料與量化規則排序的觀察資訊；實際買進仍要等盤中價格、成交量與個人風險控管確認。
-              </p>
-            </div>
-          </article>
-        </div>
-      )}
     </main>
   );
 }
