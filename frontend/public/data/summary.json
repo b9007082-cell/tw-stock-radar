@@ -1,10 +1,10 @@
 {
-  "as_of": "2026-07-07",
-  "confirmed": 14,
-  "instruments": 849,
+  "as_of": "2026-07-08",
+  "confirmed": 10,
+  "instruments": 841,
   "strategy_approved": false,
   "strategy_version": "2026.07.v5",
-  "total_signals": 203,
-  "trial": 16,
-  "watch": 173
+  "total_signals": 232,
+  "trial": 14,
+  "watch": 208
 }
