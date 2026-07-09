@@ -1,16 +1,16 @@
 {
-  "expectancy": 0.05769174318328754,
+  "expectancy": 0.06003081036610472,
   "gate_passed": false,
   "gate_reasons": [
     "交易樣本 2/200"
   ],
   "max_drawdown": 0.0,
   "profit_factor": null,
-  "sharpe_like": 1.0579357355673624,
+  "sharpe_like": 1.0555528948303177,
   "strategy": "PULLBACK_RESUME",
   "strategy_version": "2026.07.v5",
   "symbol": "5904",
-  "total_return": 0.11573804419810907,
+  "total_return": 0.12043095853505492,
   "trades": 2,
   "win_rate": 1.0
 }

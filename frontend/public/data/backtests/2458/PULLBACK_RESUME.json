@@ -1,0 +1,18 @@
+{
+  "expectancy": -0.04540491128428478,
+  "gate_passed": false,
+  "gate_reasons": [
+    "交易樣本 2/200",
+    "Profit Factor 0.00 < 1.20",
+    "扣除成本後期望值未大於 0"
+  ],
+  "max_drawdown": -0.0891045851956076,
+  "profit_factor": 0.0,
+  "sharpe_like": -2.4052106521329915,
+  "strategy": "PULLBACK_RESUME",
+  "strategy_version": "2026.07.v5",
+  "symbol": "2458",
+  "total_return": -0.0891045851956076,
+  "trades": 2,
+  "win_rate": 0.0
+}
