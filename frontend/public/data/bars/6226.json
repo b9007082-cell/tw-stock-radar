@@ -1,23 +1,5 @@
 [
   {
-    "close": 7.47,
-    "high": 7.71,
-    "low": 7.42,
-    "open": 7.71,
-    "trade_date": "2026-01-08",
-    "turnover": 2686831.0,
-    "volume": 355322
-  },
-  {
-    "close": 7.45,
-    "high": 7.6,
-    "low": 7.2,
-    "open": 7.5,
-    "trade_date": "2026-01-09",
-    "turnover": 2142934.0,
-    "volume": 292196
-  },
-  {
     "close": 7.54,
     "high": 7.69,
     "low": 7.36,
@@ -1069,5 +1051,14 @@
     "trade_date": "2026-07-09",
     "turnover": 110400548.0,
     "volume": 4198996
+  },
+  {
+    "close": 25.65,
+    "high": 28.3,
+    "low": 25.3,
+    "open": 28.3,
+    "trade_date": "2026-07-13",
+    "turnover": 106525469.0,
+    "volume": 4089435
   }
 ]
