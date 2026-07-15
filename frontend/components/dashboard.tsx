@@ -27,12 +27,14 @@ const strategyLabel: Record<Signal["strategy"], string> = {
   TREND_CONFIRMATION: "多頭確認",
   PULLBACK_RESUME: "回後買上漲",
   CONSOLIDATION_BREAKOUT: "盤整突破",
+  MA_CONSOLIDATION: "均線糾結",
 };
 
 const strategyTabs = [
   ["ALL", "全部策略"],
   ["PULLBACK_RESUME", "回後買上漲"],
   ["CONSOLIDATION_BREAKOUT", "盤整突破"],
+  ["MA_CONSOLIDATION", "均線糾結"],
 ] as const;
 
 const levelOrder: Record<SignalLevel, number> = {
@@ -163,11 +165,15 @@ function RecommendationBoard({
   title: string;
   subtitle: string;
   items: RecommendationItem[];
-  accent: "emerald" | "cyan";
+  accent: "emerald" | "cyan" | "amber";
   onSelect: (item: RecommendationItem) => void;
 }) {
   const accentClass =
-    accent === "emerald" ? "text-emerald-300" : "text-cyan-300";
+    accent === "emerald"
+      ? "text-emerald-300"
+      : accent === "cyan"
+        ? "text-cyan-300"
+        : "text-amber-300";
   return (
     <article className="overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/70 backdrop-blur">
       <div className="border-b border-slate-800 px-4 py-3">
@@ -177,6 +183,8 @@ function RecommendationBoard({
       <div className="divide-y divide-slate-800">
         {items.map((item) => {
           const volumeRatio = metricNumber(item, "volume_ratio");
+          const rangePercent = metricNumber(item, "range_percent");
+          const maSpread = metricNumber(item, "ma_spread_percent");
           return (
             <button
               key={`${item.strategy}-${item.symbol}`}
@@ -198,10 +206,15 @@ function RecommendationBoard({
                   <span>
                     {item.strategy === "PULLBACK_RESUME"
                       ? `${item.reward_risk_ratio?.toFixed(2) ?? "—"}R`
-                      : `量比 ${volumeRatio?.toFixed(2) ?? "—"}倍`}
+                      : item.strategy === "MA_CONSOLIDATION"
+                        ? `箱幅 ${rangePercent?.toFixed(1) ?? "—"}%`
+                        : `量比 ${volumeRatio?.toFixed(2) ?? "—"}倍`}
+                  </span>
+                  {item.strategy === "MA_CONSOLIDATION" && (
+                    <span>均線差 {maSpread?.toFixed(1) ?? "—"}%</span>
+                  )}
                   </span>
                 </span>
-              </span>
               <span className="text-right">
                 <span className={`block text-lg font-bold ${accentClass}`}>
                   {item.recommendation_score.toFixed(1)}
@@ -343,7 +356,7 @@ export function Dashboard() {
             台股起漲雷達
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            回後買上漲 × 盤整突破｜依公開教學原則量化
+            回後買上漲 × 盤整突破 × 均線糾結｜依公開教學原則量化
           </p>
         </div>
         <div className="text-left text-xs leading-6 text-slate-400 sm:text-right">
@@ -386,7 +399,7 @@ export function Dashboard() {
         ))}
       </section>
 
-      <section className="mb-5 grid gap-4 lg:grid-cols-2">
+      <section className="mb-5 grid gap-4 xl:grid-cols-3">
         <RecommendationBoard
           title="回後買上漲 Top 10"
           subtitle="確認優先｜風險 ≤ 8%｜前高空間 ≥ 1.5R"
@@ -399,6 +412,13 @@ export function Dashboard() {
           subtitle="確認優先｜風險 ≤ 8%｜量能與突破距離排序"
           items={recommendations?.consolidation_breakout ?? []}
           accent="cyan"
+          onSelect={selectRecommendation}
+        />
+        <RecommendationBoard
+          title="均線糾結 Top 10"
+          subtitle="盤整 ≥ 2個月｜均線收斂｜低量提前觀察"
+          items={recommendations?.ma_consolidation ?? []}
+          accent="amber"
           onSelect={selectRecommendation}
         />
       </section>

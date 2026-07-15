@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from app.domain import Bar, SignalLevel
 from app.services.strategies import (
     consolidation_signal,
+    ma_consolidation_signal,
     pullback_resume_signal,
     scan_bars,
     trend_confirmation_signal,
@@ -71,6 +72,16 @@ def _breakout_bars(level: SignalLevel) -> list[Bar]:
         )
     else:
         bars.append(_bar(len(bars), 89.7, 3_600_000))
+    return bars
+
+
+def _ma_consolidation_bars() -> list[Bar]:
+    bars: list[Bar] = []
+    for index in range(25):
+        bars.append(_bar(index, 100 + (index % 3 - 1) * 0.2, 1_600_000))
+    closes = [99.2, 100.4, 101.0, 100.1, 98.9, 99.8, 100.6, 99.6]
+    for index in range(40):
+        bars.append(_bar(len(bars), closes[index % len(closes)], 650_000))
     return bars
 
 
@@ -227,6 +238,49 @@ def test_consolidation_without_breakout_volume_is_rejected() -> None:
         turnover=original.turnover,
     )
     assert consolidation_signal(bars) is None
+
+
+def test_ma_consolidation_finds_two_month_low_volume_ma_convergence() -> None:
+    signal = ma_consolidation_signal(_ma_consolidation_bars())
+    assert signal is not None
+    assert signal.strategy == "MA_CONSOLIDATION"
+    assert signal.level == SignalLevel.WATCH
+    assert signal.executable is False
+    assert signal.metrics["ma_converged"] is True
+    assert signal.metrics["two_month_consolidation"] is True
+    assert signal.metrics["quiet_volume"] is True
+    assert float(signal.metrics["latest_volume_lots"]) == 650
+
+
+def test_ma_consolidation_rejects_active_volume() -> None:
+    bars = _ma_consolidation_bars()
+    for index in range(len(bars) - 20, len(bars)):
+        original = bars[index]
+        bars[index] = Bar(
+            date=original.date,
+            open=original.open,
+            high=original.high,
+            low=original.low,
+            close=original.close,
+            volume=1_700_000,
+            turnover=original.turnover,
+        )
+    assert ma_consolidation_signal(bars) is None
+
+
+def test_ma_consolidation_rejects_wide_range() -> None:
+    bars = _ma_consolidation_bars()
+    original = bars[-10]
+    bars[-10] = Bar(
+        date=original.date,
+        open=original.open,
+        high=125,
+        low=original.low,
+        close=original.close,
+        volume=original.volume,
+        turnover=original.turnover,
+    )
+    assert ma_consolidation_signal(bars) is None
 
 
 def test_scan_keeps_direction_and_buy_point_signals() -> None:

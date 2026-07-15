@@ -26,7 +26,8 @@ export interface Signal {
   strategy:
     | "TREND_CONFIRMATION"
     | "PULLBACK_RESUME"
-    | "CONSOLIDATION_BREAKOUT";
+    | "CONSOLIDATION_BREAKOUT"
+    | "MA_CONSOLIDATION";
   strategy_version: string;
   level: SignalLevel;
   score: number;
@@ -59,6 +60,7 @@ export interface DailyRecommendations {
   ranking_version: string;
   pullback_resume: RecommendationItem[];
   consolidation_breakout: RecommendationItem[];
+  ma_consolidation: RecommendationItem[];
 }
 
 export interface Bar {

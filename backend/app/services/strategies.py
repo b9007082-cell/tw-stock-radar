@@ -10,6 +10,10 @@ BREAKOUT_VOLUME_MULTIPLE = 1.2
 MAX_VOLUME_CONTRACTION_RATIO = 1.0
 MIN_TRADE_VOLUME_SHARES = 1_500_000
 MIN_TRADE_VOLUME_LOTS = MIN_TRADE_VOLUME_SHARES / 1000
+MA_CONSOLIDATION_DAYS = 40
+MAX_MA_CONVERGENCE_PERCENT = 5.0
+MAX_TWO_MONTH_RANGE_PERCENT = 18.0
+MAX_QUIET_VOLUME_RATIO = 0.8
 
 
 @dataclass(frozen=True)
@@ -196,6 +200,45 @@ def _metrics(context: TrendContext) -> dict[str, float | bool]:
         "latest_trough": context.latest_trough,
         "trend_confirmed": context.confirmed,
     }
+
+
+def _range_context(
+    bars: Sequence[Bar],
+    *,
+    range_high: float,
+    range_low: float,
+    range_high_index: int,
+    range_low_index: int,
+) -> TrendContext | None:
+    if len(bars) < MIN_BARS:
+        return None
+    closes = [bar.close for bar in bars]
+    volumes = [float(bar.volume) for bar in bars]
+    ma5s = sma(closes, 5)
+    ma10s = sma(closes, 10)
+    ma20s = sma(closes, 20)
+    vol20s = sma(volumes, 20)
+    index = len(bars) - 1
+    ma5 = float(ma5s[index] or 0)
+    ma10 = float(ma10s[index] or 0)
+    ma20 = float(ma20s[index] or 0)
+    ma20_5 = float(ma20s[index - 5] or ma20)
+    if min(ma5, ma10, ma20, range_high, range_low) <= 0:
+        return None
+    return TrendContext(
+        ma5=ma5,
+        ma10=ma10,
+        ma20=ma20,
+        ma20_slope_5d=percent_change(ma20, ma20_5),
+        vol20=float(vol20s[index] or 0),
+        higher_high=False,
+        higher_low=False,
+        latest_peak_index=range_high_index,
+        latest_peak=float(range_high),
+        latest_trough_index=range_low_index,
+        latest_trough=float(range_low),
+        confirmed=False,
+    )
 
 
 def _risk(entry: float, stop: float) -> tuple[float, bool]:
@@ -528,6 +571,117 @@ def consolidation_signal(
     )
 
 
+def ma_consolidation_signal(
+    bars: Sequence[Bar],
+) -> StrategySignal | None:
+    if len(bars) < MIN_BARS:
+        return None
+    latest = bars[-1]
+    closes = [bar.close for bar in bars]
+    volumes = [float(bar.volume) for bar in bars]
+    ma5 = float(sma(closes, 5)[-1] or 0)
+    ma10 = float(sma(closes, 10)[-1] or 0)
+    ma20 = float(sma(closes, 20)[-1] or 0)
+    ma60 = float(sma(closes, 60)[-1] or 0)
+    if min(ma5, ma10, ma20, ma60, latest.close) <= 0:
+        return None
+
+    consolidation_window = bars[-MA_CONSOLIDATION_DAYS:]
+    if len(consolidation_window) < MA_CONSOLIDATION_DAYS:
+        return None
+    range_high = max(bar.high for bar in consolidation_window)
+    range_low = min(bar.low for bar in consolidation_window)
+    range_high_index = len(bars) - MA_CONSOLIDATION_DAYS + max(
+        range(len(consolidation_window)),
+        key=lambda index: consolidation_window[index].high,
+    )
+    range_low_index = len(bars) - MA_CONSOLIDATION_DAYS + min(
+        range(len(consolidation_window)),
+        key=lambda index: consolidation_window[index].low,
+    )
+    range_percent = ((range_high - range_low) / latest.close) * 100
+    ma_values = [ma5, ma10, ma20, ma60]
+    ma_spread_percent = ((max(ma_values) - min(ma_values)) / latest.close) * 100
+
+    recent_volume_avg = _average(volumes[-20:])
+    previous_volume_avg = _average(volumes[-60:-20])
+    quiet_volume_ratio = (
+        recent_volume_avg / previous_volume_avg if previous_volume_avg else 0.0
+    )
+    latest_volume_lots = latest.volume / 1000
+    recent_volume_lots = recent_volume_avg / 1000
+    breakout_distance_percent = (
+        ((range_high - latest.close) / latest.close) * 100
+        if latest.close > 0
+        else 0.0
+    )
+
+    ma_converged = ma_spread_percent <= MAX_MA_CONVERGENCE_PERCENT
+    two_month_consolidation = range_percent <= MAX_TWO_MONTH_RANGE_PERCENT
+    quiet_volume = (
+        0 < quiet_volume_ratio <= MAX_QUIET_VOLUME_RATIO
+        and latest.volume <= recent_volume_avg * 1.2
+    )
+    if not (ma_converged and two_month_consolidation and quiet_volume):
+        return None
+
+    context = _range_context(
+        bars,
+        range_high=range_high,
+        range_low=range_low,
+        range_high_index=range_high_index,
+        range_low_index=range_low_index,
+    )
+    if context is None:
+        return None
+
+    tightness_bonus = max(0.0, MAX_MA_CONVERGENCE_PERCENT - ma_spread_percent) * 3
+    range_bonus = max(0.0, MAX_TWO_MONTH_RANGE_PERCENT - range_percent) * 0.8
+    volume_bonus = max(0.0, MAX_QUIET_VOLUME_RATIO - quiet_volume_ratio) * 18
+    proximity_bonus = max(0.0, 6.0 - max(0.0, breakout_distance_percent)) * 1.2
+    score = round(
+        min(92.0, 72.0 + tightness_bonus + range_bonus + volume_bonus + proximity_bonus)
+    )
+
+    return _signal(
+        strategy="MA_CONSOLIDATION",
+        level=SignalLevel.WATCH,
+        bars=bars,
+        context=context,
+        score=score,
+        trigger_price=range_high,
+        timing_status="WAIT_CONFIRMATION",
+        timing_note=(
+            "均線糾結且兩個月以上低量盤整，先列入提前觀察；"
+            "等待放量紅K收盤突破箱頂後，才視為可能起漲確認。"
+        ),
+        reasons=[
+            f"近{MA_CONSOLIDATION_DAYS}個交易日盤整，箱型震幅 {range_percent:.1f}%",
+            f"5/10/20/60日均線糾結，最大乖離 {ma_spread_percent:.1f}%",
+            f"近20日均量為前40日均量的 {quiet_volume_ratio:.2f} 倍",
+            f"成交張數 {latest_volume_lots:.0f} 張，近20日均量 {recent_volume_lots:.0f} 張",
+            "目前屬低量潛伏觀察，不是直接買點；等放量紅K突破箱頂再確認",
+        ],
+        extra_metrics={
+            "ma60": ma60,
+            "ma_spread_percent": ma_spread_percent,
+            "consolidation_days": float(MA_CONSOLIDATION_DAYS),
+            "range_high": range_high,
+            "range_low": range_low,
+            "range_percent": range_percent,
+            "quiet_volume_ratio": quiet_volume_ratio,
+            "recent_volume_avg": recent_volume_avg,
+            "previous_volume_avg": previous_volume_avg,
+            "latest_volume_lots": latest_volume_lots,
+            "recent_volume_lots": recent_volume_lots,
+            "breakout_distance_percent": breakout_distance_percent,
+            "ma_converged": ma_converged,
+            "two_month_consolidation": two_month_consolidation,
+            "quiet_volume": quiet_volume,
+        },
+    )
+
+
 def scan_bars(
     bars: Sequence[Bar], relative_strength_percentile: float = 0.5
 ) -> list[StrategySignal]:
@@ -536,5 +690,6 @@ def scan_bars(
         trend_confirmation_signal(bars),
         pullback_resume_signal(bars),
         consolidation_signal(bars),
+        ma_consolidation_signal(bars),
     ]
     return [signal for signal in signals if signal is not None]

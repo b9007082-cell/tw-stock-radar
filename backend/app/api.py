@@ -120,6 +120,7 @@ def recommendations(
             ranking_version=RECOMMENDATION_VERSION,
             pullback_resume=[],
             consolidation_breakout=[],
+            ma_consolidation=[],
         )
     rows = session.execute(
         select(Signal, Instrument)
@@ -127,7 +128,7 @@ def recommendations(
         .where(
             Signal.signal_date == latest,
             Signal.strategy.in_(
-                ["PULLBACK_RESUME", "CONSOLIDATION_BREAKOUT"]
+                ["PULLBACK_RESUME", "CONSOLIDATION_BREAKOUT", "MA_CONSOLIDATION"]
             ),
         )
     ).all()
@@ -141,6 +142,7 @@ def recommendations(
         ranking_version=RECOMMENDATION_VERSION,
         pullback_resume=ranked["pullback_resume"],
         consolidation_breakout=ranked["consolidation_breakout"],
+        ma_consolidation=ranked["ma_consolidation"],
     )
 
 
@@ -185,7 +187,7 @@ def instrument_backtest(
         default="PULLBACK_RESUME",
         pattern=(
             "^(TREND_CONFIRMATION|PULLBACK_RESUME|"
-            "CONSOLIDATION_BREAKOUT)$"
+            "CONSOLIDATION_BREAKOUT|MA_CONSOLIDATION)$"
         ),
     ),
     session: Session = Depends(get_db),

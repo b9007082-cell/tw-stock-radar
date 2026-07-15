@@ -3,8 +3,8 @@
   "confirmed": 9,
   "instruments": 835,
   "strategy_approved": false,
-  "strategy_version": "2026.07.v7",
-  "total_signals": 76,
+  "strategy_version": "2026.07.v8",
+  "total_signals": 92,
   "trial": 2,
-  "watch": 65
+  "watch": 81
 }
