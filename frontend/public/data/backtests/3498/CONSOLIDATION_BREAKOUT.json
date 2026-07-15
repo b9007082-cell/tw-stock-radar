@@ -10,7 +10,7 @@
   "profit_factor": 0.0,
   "sharpe_like": 0.0,
   "strategy": "CONSOLIDATION_BREAKOUT",
-  "strategy_version": "2026.07.v8",
+  "strategy_version": "2026.07.v9",
   "symbol": "3498",
   "total_return": -0.13217821723730805,
   "trades": 1,
