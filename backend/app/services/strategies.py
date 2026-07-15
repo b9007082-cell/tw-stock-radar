@@ -8,6 +8,8 @@ from app.services.indicators import confirmed_swings, percent_change, sma
 MIN_BARS = 65
 BREAKOUT_VOLUME_MULTIPLE = 1.2
 MAX_VOLUME_CONTRACTION_RATIO = 1.0
+MIN_TRADE_VOLUME_SHARES = 2_000_000
+MIN_TRADE_VOLUME_LOTS = MIN_TRADE_VOLUME_SHARES / 1000
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,113 @@ def _trend_context(bars: Sequence[Bar]) -> TrendContext | None:
 
 def _average(values: Sequence[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def _ema(values: Sequence[float], period: int) -> list[float]:
+    if not values:
+        return []
+    multiplier = 2 / (period + 1)
+    result = [float(values[0])]
+    for value in values[1:]:
+        result.append((float(value) - result[-1]) * multiplier + result[-1])
+    return result
+
+
+def _macd_metrics(closes: Sequence[float]) -> dict[str, float | bool]:
+    if len(closes) < 35:
+        return {
+            "macd_line": 0.0,
+            "macd_signal": 0.0,
+            "macd_histogram": 0.0,
+            "macd_positive": False,
+        }
+    ema12 = _ema(closes, 12)
+    ema26 = _ema(closes, 26)
+    macd_line = [fast - slow for fast, slow in zip(ema12, ema26, strict=True)]
+    signal_line = _ema(macd_line, 9)
+    histogram = [line - signal for line, signal in zip(macd_line, signal_line, strict=True)]
+    macd_positive = macd_line[-1] > 0
+    return {
+        "macd_line": macd_line[-1],
+        "macd_signal": signal_line[-1],
+        "macd_histogram": histogram[-1],
+        "macd_positive": macd_positive,
+    }
+
+
+def _kd_metrics(bars: Sequence[Bar], period: int = 9) -> dict[str, float | bool]:
+    if len(bars) < period + 3:
+        return {
+            "kd_k": 0.0,
+            "kd_d": 0.0,
+            "kd_low_golden_up": False,
+        }
+    k_values: list[float] = []
+    d_values: list[float] = []
+    k = 50.0
+    d = 50.0
+    for index in range(len(bars)):
+        if index < period - 1:
+            k_values.append(k)
+            d_values.append(d)
+            continue
+        window = bars[index - period + 1 : index + 1]
+        low = min(bar.low for bar in window)
+        high = max(bar.high for bar in window)
+        rsv = 50.0 if high == low else ((bars[index].close - low) / (high - low)) * 100
+        k = (2 / 3) * k + (1 / 3) * rsv
+        d = (2 / 3) * d + (1 / 3) * k
+        k_values.append(k)
+        d_values.append(d)
+    recent_low = min(k_values[-5:] + d_values[-5:])
+    kd_low_golden_up = (
+        k_values[-1] > d_values[-1]
+        and k_values[-1] > k_values[-2]
+        and recent_low < 55
+    )
+    return {
+        "kd_k": k_values[-1],
+        "kd_d": d_values[-1],
+        "kd_low_golden_up": kd_low_golden_up,
+    }
+
+
+def _buy_confirmation_metrics(
+    bars: Sequence[Bar],
+    context: TrendContext,
+) -> dict[str, float | bool]:
+    latest = bars[-1]
+    previous = bars[-2]
+    latest_volume_lots = latest.volume / 1000
+    red_candle = latest.close > latest.open
+    closed_above_ma5 = latest.close > context.ma5
+    broke_previous_high = latest.close > previous.high
+    price_volume_aligned = latest.close > previous.close and latest.volume > previous.volume
+    metrics: dict[str, float | bool] = {
+        "latest_volume_lots": latest_volume_lots,
+        "minimum_volume_lots": MIN_TRADE_VOLUME_LOTS,
+        "liquidity_ok": latest.volume >= MIN_TRADE_VOLUME_SHARES,
+        "red_candle": red_candle,
+        "closed_above_ma5": closed_above_ma5,
+        "broke_previous_high": broke_previous_high,
+        "price_volume_aligned": price_volume_aligned,
+    }
+    metrics.update(_kd_metrics(bars))
+    metrics.update(_macd_metrics([bar.close for bar in bars]))
+    metrics["indicator_ideal"] = bool(metrics["kd_low_golden_up"]) and bool(
+        metrics["macd_positive"]
+    )
+    metrics["photo_conditions_confirmed"] = all(
+        bool(metrics[key])
+        for key in (
+            "liquidity_ok",
+            "red_candle",
+            "closed_above_ma5",
+            "broke_previous_high",
+            "price_volume_aligned",
+        )
+    )
+    return metrics
 
 
 def _metrics(context: TrendContext) -> dict[str, float | bool]:
@@ -151,7 +260,11 @@ def trend_confirmation_signal(
     bars: Sequence[Bar],
 ) -> StrategySignal | None:
     context = _trend_context(bars)
-    if context is None or not context.confirmed:
+    if (
+        context is None
+        or not context.confirmed
+        or bars[-1].volume < MIN_TRADE_VOLUME_SHARES
+    ):
         return None
     return _signal(
         strategy="TREND_CONFIRMATION",
@@ -226,10 +339,16 @@ def pullback_resume_signal(
     if not pullback_volume_contracting:
         return None
 
+    confirmation_metrics = _buy_confirmation_metrics(bars, context)
+    if not bool(confirmation_metrics["liquidity_ok"]):
+        return None
+
     back_above_ma5 = latest.close > context.ma5
     broke_previous_high = latest.close > previous.high
     if back_above_ma5 and broke_previous_high:
         if not rebound_volume_expanding:
+            return None
+        if not bool(confirmation_metrics["photo_conditions_confirmed"]):
             return None
         level = SignalLevel.CONFIRMED
         timing_status = "READY"
@@ -268,12 +387,18 @@ def pullback_resume_signal(
         timing_note=timing_note,
         reasons=[
             "多頭確認：頭頭高、底底高",
+            f"成交張數 {confirmation_metrics['latest_volume_lots']:.0f} 張，大於2000張",
             "回檔期間收盤守在20日線之上",
             f"回檔均量為前段均量的 {pullback_volume_ratio:.2f} 倍",
             (
-                "收盤站回5日線並突破前一日高點，且轉強量大於回檔均量"
+                "紅K收盤站回5日線、突破前一日高點，且轉強量大於回檔均量"
                 if level == SignalLevel.CONFIRMED
                 else "等待回檔後重新轉強"
+            ),
+            (
+                "KD低檔黃金交叉向上，MACD維持0軸之上"
+                if bool(confirmation_metrics["indicator_ideal"])
+                else "KD/MACD指標尚未完全同步，需留意追蹤"
             ),
         ],
         extra_metrics={
@@ -288,6 +413,7 @@ def pullback_resume_signal(
             "pullback_volume_contracting": pullback_volume_contracting,
             "rebound_volume_ratio": rebound_volume_ratio,
             "rebound_volume_expanding": rebound_volume_expanding,
+            **confirmation_metrics,
         },
     )
 
@@ -303,6 +429,10 @@ def consolidation_signal(
     ):
         return None
     latest = bars[-1]
+    previous = bars[-2]
+    confirmation_metrics = _buy_confirmation_metrics(bars, context)
+    if not bool(confirmation_metrics["liquidity_ok"]):
+        return None
     trigger = context.latest_peak
     prior_consolidation_volumes = [float(bar.volume) for bar in bars[-21:-1]]
     previous_volumes = [float(bar.volume) for bar in bars[-41:-21]]
@@ -329,6 +459,8 @@ def consolidation_signal(
     if not volume_contracting:
         return None
     if latest.close > trigger and volume_confirmed:
+        if not bool(confirmation_metrics["photo_conditions_confirmed"]):
+            return None
         level = SignalLevel.CONFIRMED
         timing_status = "READY"
         timing_note = (
@@ -361,15 +493,23 @@ def consolidation_signal(
         timing_note=timing_note,
         reasons=[
             "多頭確認：頭頭高、底底高",
+            f"成交張數 {confirmation_metrics['latest_volume_lots']:.0f} 張，大於2000張",
             "最近確認波谷晚於最近確認波峰，整理結構完整",
+            "紅K收盤突破上頸線與前一日高點",
             f"整理均量為前段均量的 {consolidation_volume_ratio:.2f} 倍",
             (
                 "收盤突破最近確認壓力且成交量高於整理均量1.2倍"
                 if level == SignalLevel.CONFIRMED
                 else "等待收盤站穩最近確認壓力"
             ),
+            (
+                "KD低檔黃金交叉向上，MACD維持0軸之上"
+                if bool(confirmation_metrics["indicator_ideal"])
+                else "KD/MACD指標尚未完全同步，需留意追蹤"
+            ),
         ],
         extra_metrics={
+            "previous_high": previous.high,
             "volume_ratio": breakout_volume_ratio,
             "volume_confirmed": volume_confirmed,
             "consolidation_volume_avg": consolidation_volume_avg,
@@ -377,6 +517,7 @@ def consolidation_signal(
             "consolidation_volume_ratio": consolidation_volume_ratio,
             "volume_contracting": volume_contracting,
             "breakout_volume_ratio": breakout_volume_ratio,
+            **confirmation_metrics,
         },
     )
 

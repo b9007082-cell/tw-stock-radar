@@ -76,12 +76,17 @@ def _pullback_score(
         f"結構風險 {risk_percent:.2f}%",
         f"距5MA {distance_above_ma5 * 100:.2f}%",
     ]
+    latest_volume_lots = _number(metrics.get("latest_volume_lots"))
+    if latest_volume_lots is not None:
+        reasons.append(f"成交 {latest_volume_lots:.0f}張")
     pullback_volume_ratio = _number(metrics.get("pullback_volume_ratio"))
     rebound_volume_ratio = _number(metrics.get("rebound_volume_ratio"))
     if pullback_volume_ratio is not None:
         reasons.append(f"回檔量縮 {pullback_volume_ratio:.2f}倍")
     if rebound_volume_ratio is not None:
         reasons.append(f"轉強量 {rebound_volume_ratio:.2f}倍")
+    if metrics.get("indicator_ideal") is True:
+        reasons.append("KD/MACD同步")
     return round(score, 1), round(reward_risk, 2), reasons
 
 
@@ -118,9 +123,14 @@ def _breakout_score(
         distance_label,
         f"結構風險 {risk_percent:.2f}%",
     ]
+    latest_volume_lots = _number(metrics.get("latest_volume_lots"))
+    if latest_volume_lots is not None:
+        reasons.append(f"成交 {latest_volume_lots:.0f}張")
     consolidation_volume_ratio = _number(metrics.get("consolidation_volume_ratio"))
     if consolidation_volume_ratio is not None:
         reasons.append(f"整理量縮 {consolidation_volume_ratio:.2f}倍")
+    if metrics.get("indicator_ideal") is True:
+        reasons.append("KD/MACD同步")
     return round(score, 1), reasons
 
 

@@ -9,7 +9,7 @@ from app.services.strategies import (
 )
 
 
-def _bar(index: int, close: float, volume: int = 1_000_000) -> Bar:
+def _bar(index: int, close: float, volume: int = 3_000_000) -> Bar:
     return Bar(
         date=date(2026, 1, 1) + timedelta(days=index),
         open=close - 0.1,
@@ -41,7 +41,11 @@ def _pullback_bars(level: SignalLevel) -> list[Bar]:
     else:
         closes.append(87.6)
     for index, close in enumerate(closes):
-        volume = 900_000 if index == len(closes) - 1 and level != SignalLevel.WATCH else 800_000
+        volume = (
+            3_000_000
+            if index == len(closes) - 1 and level != SignalLevel.WATCH
+            else 2_400_000
+        )
         bars.append(_bar(len(bars), close, volume))
     return bars
 
@@ -49,11 +53,11 @@ def _pullback_bars(level: SignalLevel) -> list[Bar]:
 def _breakout_bars(level: SignalLevel) -> list[Bar]:
     bars = _uptrend_base()
     for close in (87.2, 86.7, 87.2):
-        bars.append(_bar(len(bars), close, 800_000))
+        bars.append(_bar(len(bars), close, 2_400_000))
     if level == SignalLevel.WATCH:
-        bars.append(_bar(len(bars), 89.0, 800_000))
+        bars.append(_bar(len(bars), 89.0, 2_400_000))
     elif level == SignalLevel.TRIAL:
-        trial = _bar(len(bars), 89.0, 900_000)
+        trial = _bar(len(bars), 89.0, 3_000_000)
         bars.append(
             Bar(
                 date=trial.date,
@@ -66,7 +70,7 @@ def _breakout_bars(level: SignalLevel) -> list[Bar]:
             )
         )
     else:
-        bars.append(_bar(len(bars), 89.7, 1_600_000))
+        bars.append(_bar(len(bars), 89.7, 3_600_000))
     return bars
 
 
@@ -147,7 +151,7 @@ def test_pullback_without_volume_contraction_is_rejected() -> None:
             high=original.high,
             low=original.low,
             close=original.close,
-            volume=1_200_000,
+            volume=3_200_000,
             turnover=original.turnover,
         )
     assert pullback_resume_signal(bars) is None
@@ -162,7 +166,7 @@ def test_pullback_without_rebound_volume_expansion_is_rejected() -> None:
         high=original.high,
         low=original.low,
         close=original.close,
-        volume=700_000,
+        volume=2_300_000,
         turnover=original.turnover,
     )
     assert pullback_resume_signal(bars) is None
@@ -204,7 +208,7 @@ def test_consolidation_without_volume_contraction_is_rejected() -> None:
             high=original.high,
             low=original.low,
             close=original.close,
-            volume=1_300_000,
+            volume=3_200_000,
             turnover=original.turnover,
         )
     assert consolidation_signal(bars) is None
@@ -219,7 +223,7 @@ def test_consolidation_without_breakout_volume_is_rejected() -> None:
         high=original.high,
         low=original.low,
         close=original.close,
-        volume=900_000,
+        volume=2_500_000,
         turnover=original.turnover,
     )
     assert consolidation_signal(bars) is None
