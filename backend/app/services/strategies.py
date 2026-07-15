@@ -8,7 +8,7 @@ from app.services.indicators import confirmed_swings, percent_change, sma
 MIN_BARS = 65
 BREAKOUT_VOLUME_MULTIPLE = 1.2
 MAX_VOLUME_CONTRACTION_RATIO = 1.0
-MIN_TRADE_VOLUME_SHARES = 2_000_000
+MIN_TRADE_VOLUME_SHARES = 1_500_000
 MIN_TRADE_VOLUME_LOTS = MIN_TRADE_VOLUME_SHARES / 1000
 
 
@@ -387,7 +387,10 @@ def pullback_resume_signal(
         timing_note=timing_note,
         reasons=[
             "多頭確認：頭頭高、底底高",
-            f"成交張數 {confirmation_metrics['latest_volume_lots']:.0f} 張，大於2000張",
+            (
+                f"成交張數 {confirmation_metrics['latest_volume_lots']:.0f} 張，"
+                f"大於{MIN_TRADE_VOLUME_LOTS:.0f}張"
+            ),
             "回檔期間收盤守在20日線之上",
             f"回檔均量為前段均量的 {pullback_volume_ratio:.2f} 倍",
             (
@@ -493,7 +496,10 @@ def consolidation_signal(
         timing_note=timing_note,
         reasons=[
             "多頭確認：頭頭高、底底高",
-            f"成交張數 {confirmation_metrics['latest_volume_lots']:.0f} 張，大於2000張",
+            (
+                f"成交張數 {confirmation_metrics['latest_volume_lots']:.0f} 張，"
+                f"大於{MIN_TRADE_VOLUME_LOTS:.0f}張"
+            ),
             "最近確認波谷晚於最近確認波峰，整理結構完整",
             "紅K收盤突破上頸線與前一日高點",
             f"整理均量為前段均量的 {consolidation_volume_ratio:.2f} 倍",

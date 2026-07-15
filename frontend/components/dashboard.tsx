@@ -84,6 +84,11 @@ function metricNumber(signal: Signal, key: string) {
   return typeof value === "number" ? value : null;
 }
 
+function formatLots(signal: Signal) {
+  const lots = metricNumber(signal, "latest_volume_lots");
+  return lots == null ? "—" : `${Math.round(lots).toLocaleString()}張`;
+}
+
 function TrendMetricsPanel({ signal }: { signal: Signal }) {
   const higherHigh = signal.metrics.higher_high === true;
   const higherLow = signal.metrics.higher_low === true;
@@ -189,6 +194,7 @@ function RecommendationBoard({
                 <span className="mt-1 flex flex-wrap gap-x-2 text-[11px] text-slate-500">
                   <span>{levelLabel[item.level]}</span>
                   <span>風險 {item.structure_risk_percent.toFixed(1)}%</span>
+                  <span>成交 {formatLots(item)}</span>
                   <span>
                     {item.strategy === "PULLBACK_RESUME"
                       ? `${item.reward_risk_ratio?.toFixed(2) ?? "—"}R`
@@ -449,6 +455,7 @@ export function Dashboard() {
                   <th className="px-4 py-3">策略</th>
                   <th className="px-4 py-3">階段</th>
                   <th className="px-4 py-3 text-right">分數</th>
+                  <th className="px-4 py-3 text-right">成交張數</th>
                   <th className="px-4 py-3 text-right">收盤</th>
                   <th className="px-4 py-3 text-right">建議進場區</th>
                   <th className="px-4 py-3 text-right">停損</th>
@@ -487,6 +494,9 @@ export function Dashboard() {
                     </td>
                     <td className="px-4 py-3 text-right font-semibold">
                       {signal.score}
+                    </td>
+                    <td className="px-4 py-3 text-right text-cyan-200">
+                      {formatLots(signal)}
                     </td>
                     <td className="px-4 py-3 text-right">{formatPrice(signal.close)}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-right text-emerald-300">
@@ -532,10 +542,11 @@ export function Dashboard() {
               </div>
               <TrendMetricsPanel signal={activeSelected} />
               <EntryTimingPanel signal={activeSelected} />
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
                 {[
                   ["建議進場區", formatEntryZone(activeSelected)],
                   ["確認價", formatPrice(activeSelected.trigger_price)],
+                  ["成交張數", formatLots(activeSelected)],
                   ["防守價", formatPrice(activeSelected.stop_price)],
                   [
                     "單筆風險",
