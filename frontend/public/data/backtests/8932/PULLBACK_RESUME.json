@@ -8,7 +8,7 @@
   "profit_factor": 1.256095385251252,
   "sharpe_like": 0.1135126586071766,
   "strategy": "PULLBACK_RESUME",
-  "strategy_version": "2026.07.v10",
+  "strategy_version": "2026.07.v11",
   "symbol": "8932",
   "total_return": 0.012972736701824417,
   "trades": 2,
