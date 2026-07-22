@@ -5,7 +5,7 @@ from typing import Any
 
 
 RECOMMENDATION_LIMIT = 10
-RECOMMENDATION_VERSION = "2026.07.r2"
+RECOMMENDATION_VERSION = "2026.07.r3"
 MAX_STRUCTURE_RISK_PERCENT = 8.0
 MIN_PULLBACK_REWARD_RISK = 1.5
 
@@ -134,33 +134,36 @@ def _breakout_score(
     return round(score, 1), reasons
 
 
-def _ma_consolidation_score(
+def _bottom_reversal_score(
     signal: Mapping[str, Any],
     metrics: Mapping[str, Any],
 ) -> tuple[float, list[str]] | None:
-    ma_spread = _number(metrics.get("ma_spread_percent"))
-    range_percent = _number(metrics.get("range_percent"))
-    quiet_volume_ratio = _number(metrics.get("quiet_volume_ratio"))
-    distance = _number(metrics.get("breakout_distance_percent")) or 0.0
-    if ma_spread is None or range_percent is None or quiet_volume_ratio is None:
+    drawdown = _number(metrics.get("drawdown_percent"))
+    volume_ratio = _number(metrics.get("stop_volume_ratio"))
+    stop_low = _number(metrics.get("previous_stop_low"))
+    close = _number(signal.get("close"))
+    if drawdown is None or volume_ratio is None or stop_low is None or close is None:
         return None
-    convergence_score = 35 * _clamp((5.0 - ma_spread) / 5.0)
-    range_score = 25 * _clamp((18.0 - range_percent) / 18.0)
-    volume_score = 25 * _clamp((0.8 - quiet_volume_ratio) / 0.8)
-    proximity_score = 15 * _clamp(1.0 - max(0.0, distance) / 6.0)
-    score = convergence_score + range_score + volume_score + proximity_score
+    risk_percent = ((close - stop_low) / close) * 100 if close > stop_low else 99.0
+    if risk_percent <= 0 or risk_percent > MAX_STRUCTURE_RISK_PERCENT:
+        return None
+    drawdown_score = 30 * _clamp((drawdown - 15.0) / 15.0)
+    volume_score = 30 * _clamp((volume_ratio - 2.0) / 2.0)
+    risk_component = _risk_score(risk_percent, weight=25.0)
+    confirmation_score = 15 if metrics.get("confirmed_buy") is True else 6
+    score = drawdown_score + volume_score + risk_component + confirmation_score
     reasons = [
-        f"均線差 {ma_spread:.1f}%",
-        f"箱型震幅 {range_percent:.1f}%",
-        f"低量 {quiet_volume_ratio:.2f}倍",
-        f"距箱頂 {max(0.0, distance):.1f}%",
+        f"跌幅 {drawdown:.1f}%",
+        f"爆量 {volume_ratio:.2f}倍",
+        f"止跌K風險 {risk_percent:.2f}%",
+        "突破止跌K高點" if metrics.get("confirmed_buy") is True else "等待突破止跌K高點",
     ]
     latest_volume_lots = _number(metrics.get("latest_volume_lots"))
-    recent_volume_lots = _number(metrics.get("recent_volume_lots"))
+    stop_volume_lots = _number(metrics.get("stop_volume_lots"))
     if latest_volume_lots is not None:
         reasons.append(f"成交 {latest_volume_lots:.0f}張")
-    if recent_volume_lots is not None:
-        reasons.append(f"20日均量 {recent_volume_lots:.0f}張")
+    if stop_volume_lots is not None:
+        reasons.append(f"止跌K {stop_volume_lots:.0f}張")
     return round(score, 1), reasons
 
 
@@ -172,26 +175,30 @@ def build_recommendations(
     grouped: dict[str, list[dict[str, Any]]] = {
         "pullback_resume": [],
         "consolidation_breakout": [],
-        "ma_consolidation": [],
+        "bottom_reversal": [],
     }
     for signal in signals:
         strategy = str(signal.get("strategy", ""))
         level = str(signal.get("level", ""))
         raw_metrics = signal.get("metrics", {})
         metrics = raw_metrics if isinstance(raw_metrics, Mapping) else {}
-        if strategy == "MA_CONSOLIDATION":
-            if level != "WATCH":
+        if strategy == "BOTTOM_REVERSAL":
+            if level not in {"WATCH", "CONFIRMED"}:
                 continue
-            result = _ma_consolidation_score(signal, metrics)
+            result = _bottom_reversal_score(signal, metrics)
             if result is None:
                 continue
             score, reasons = result
-            grouped["ma_consolidation"].append(
+            grouped["bottom_reversal"].append(
                 {
                     **signal,
                     "rank": 0,
                     "recommendation_score": score,
-                    "structure_risk_percent": 0.0,
+                    "structure_risk_percent": round(
+                        ((float(signal["close"]) - float(metrics["previous_stop_low"]))
+                         / float(signal["close"])) * 100,
+                        2,
+                    ),
                     "reward_risk_ratio": None,
                     "ranking_reasons": reasons,
                 }

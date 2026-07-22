@@ -138,42 +138,42 @@ def test_limits_each_strategy_to_ten_and_breaks_ties_by_symbol() -> None:
     ]
 
 
-def test_ma_consolidation_ranks_watchlist_by_tight_quiet_base() -> None:
-    loose = _signal(
+def test_bottom_reversal_ranks_by_deeper_drop_and_volume() -> None:
+    mild = _signal(
         "3001",
-        "MA_CONSOLIDATION",
+        "BOTTOM_REVERSAL",
         level="WATCH",
         close=100,
-        stop=90,
+        stop=94,
         extra_metrics={
-            "ma_spread_percent": 4.5,
-            "range_percent": 16.0,
-            "quiet_volume_ratio": 0.75,
-            "breakout_distance_percent": 5.0,
-            "latest_volume_lots": 700,
-            "recent_volume_lots": 680,
+            "drawdown_percent": 16.0,
+            "stop_volume_ratio": 2.1,
+            "previous_stop_low": 94,
+            "latest_volume_lots": 2500,
+            "stop_volume_lots": 2400,
+            "confirmed_buy": False,
         },
     )
-    tight = _signal(
+    strong = _signal(
         "3002",
-        "MA_CONSOLIDATION",
-        level="WATCH",
+        "BOTTOM_REVERSAL",
+        level="CONFIRMED",
         close=100,
-        stop=90,
+        stop=96,
         extra_metrics={
-            "ma_spread_percent": 1.8,
-            "range_percent": 8.5,
-            "quiet_volume_ratio": 0.42,
-            "breakout_distance_percent": 1.6,
-            "latest_volume_lots": 600,
-            "recent_volume_lots": 620,
+            "drawdown_percent": 25.0,
+            "stop_volume_ratio": 3.2,
+            "previous_stop_low": 96,
+            "latest_volume_lots": 3000,
+            "stop_volume_lots": 2900,
+            "confirmed_buy": True,
         },
     )
-    result = build_recommendations([loose, tight])
-    items = result["ma_consolidation"]
+    result = build_recommendations([mild, strong])
+    items = result["bottom_reversal"]
     assert [item["symbol"] for item in items] == ["3002", "3001"]
-    assert "均線差 1.8%" in items[0]["ranking_reasons"]
-    assert items[0]["structure_risk_percent"] == 0.0
+    assert "突破止跌K高點" in items[0]["ranking_reasons"]
+    assert items[0]["structure_risk_percent"] == 4.0
 
 
 def test_unknown_fields_do_not_change_snapshot_ranking() -> None:

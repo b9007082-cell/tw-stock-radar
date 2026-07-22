@@ -42,7 +42,7 @@ class RecommendationsResponse(BaseModel):
     ranking_version: str
     pullback_resume: list[RecommendationItemResponse]
     consolidation_breakout: list[RecommendationItemResponse]
-    ma_consolidation: list[RecommendationItemResponse]
+    bottom_reversal: list[RecommendationItemResponse]
 
 
 class BarResponse(BaseModel):

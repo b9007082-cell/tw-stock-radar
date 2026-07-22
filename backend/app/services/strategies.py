@@ -10,10 +10,12 @@ BREAKOUT_VOLUME_MULTIPLE = 1.2
 MAX_VOLUME_CONTRACTION_RATIO = 1.0
 MIN_TRADE_VOLUME_SHARES = 2_000_000
 MIN_TRADE_VOLUME_LOTS = MIN_TRADE_VOLUME_SHARES / 1000
-MA_CONSOLIDATION_DAYS = 40
-MAX_MA_CONVERGENCE_PERCENT = 5.0
-MAX_TWO_MONTH_RANGE_PERCENT = 18.0
-MAX_QUIET_VOLUME_RATIO = 0.8
+REVERSAL_LOOKBACK_DAYS = 20
+REVERSAL_MIN_DRAWDOWN_PERCENT = 15.0
+REVERSAL_SHARP_DROP_DAYS = 5
+REVERSAL_SHARP_DROP_PERCENT = 8.0
+REVERSAL_MIN_CONSECUTIVE_DOWN_DAYS = 3
+REVERSAL_VOLUME_MULTIPLE = 2.0
 
 
 @dataclass(frozen=True)
@@ -571,113 +573,160 @@ def consolidation_signal(
     )
 
 
-def ma_consolidation_signal(
+def _consecutive_down_days(bars: Sequence[Bar]) -> int:
+    count = 0
+    for index in range(len(bars) - 1, 0, -1):
+        if bars[index].close < bars[index - 1].close:
+            count += 1
+        else:
+            break
+    return count
+
+
+def _is_stopping_candle(bar: Bar) -> bool:
+    candle_range = max(0.0, bar.high - bar.low)
+    if candle_range <= 0:
+        return False
+    body = abs(bar.close - bar.open)
+    lower_shadow = min(bar.open, bar.close) - bar.low
+    close_location = (bar.close - bar.low) / candle_range
+    long_lower_shadow = lower_shadow >= max(body * 1.2, candle_range * 0.35)
+    doji = body <= candle_range * 0.2 and close_location >= 0.45
+    bullish_reversal = bar.close > bar.open and close_location >= 0.55
+    return long_lower_shadow or doji or bullish_reversal
+
+
+def bottom_reversal_signal(
     bars: Sequence[Bar],
 ) -> StrategySignal | None:
     if len(bars) < MIN_BARS:
         return None
     latest = bars[-1]
-    closes = [bar.close for bar in bars]
-    volumes = [float(bar.volume) for bar in bars]
-    ma5 = float(sma(closes, 5)[-1] or 0)
-    ma10 = float(sma(closes, 10)[-1] or 0)
-    ma20 = float(sma(closes, 20)[-1] or 0)
-    ma60 = float(sma(closes, 60)[-1] or 0)
-    if min(ma5, ma10, ma20, ma60, latest.close) <= 0:
+    previous = bars[-2]
+    pre_stop = bars[-3]
+    if min(latest.close, previous.high, previous.low, pre_stop.volume) <= 0:
         return None
+    latest_confirms_previous = latest.close > previous.high and latest.close > latest.open
+    stop_bar = previous if latest_confirms_previous else latest
+    before_stop_bar = pre_stop if latest_confirms_previous else previous
 
-    consolidation_window = bars[-MA_CONSOLIDATION_DAYS:]
-    if len(consolidation_window) < MA_CONSOLIDATION_DAYS:
+    lookback_window = bars[-REVERSAL_LOOKBACK_DAYS:]
+    if len(lookback_window) < REVERSAL_LOOKBACK_DAYS:
         return None
-    range_high = max(bar.high for bar in consolidation_window)
-    range_low = min(bar.low for bar in consolidation_window)
-    range_high_index = len(bars) - MA_CONSOLIDATION_DAYS + max(
-        range(len(consolidation_window)),
-        key=lambda index: consolidation_window[index].high,
+    recent_high = max(bar.high for bar in lookback_window)
+    recent_low = min(bar.low for bar in lookback_window)
+    recent_high_index = len(bars) - REVERSAL_LOOKBACK_DAYS + max(
+        range(len(lookback_window)),
+        key=lambda index: lookback_window[index].high,
     )
-    range_low_index = len(bars) - MA_CONSOLIDATION_DAYS + min(
-        range(len(consolidation_window)),
-        key=lambda index: consolidation_window[index].low,
+    recent_low_index = len(bars) - REVERSAL_LOOKBACK_DAYS + min(
+        range(len(lookback_window)),
+        key=lambda index: lookback_window[index].low,
     )
-    range_percent = ((range_high - range_low) / latest.close) * 100
-    ma_values = [ma5, ma10, ma20, ma60]
-    ma_spread_percent = ((max(ma_values) - min(ma_values)) / latest.close) * 100
 
-    recent_volume_avg = _average(volumes[-20:])
-    previous_volume_avg = _average(volumes[-60:-20])
-    quiet_volume_ratio = (
-        recent_volume_avg / previous_volume_avg if previous_volume_avg else 0.0
-    )
-    latest_volume_lots = latest.volume / 1000
-    recent_volume_lots = recent_volume_avg / 1000
-    breakout_distance_percent = (
-        ((range_high - latest.close) / latest.close) * 100
-        if latest.close > 0
+    drawdown_percent = (
+        ((recent_high - stop_bar.low) / recent_high) * 100
+        if recent_high > 0
         else 0.0
     )
-
-    ma_converged = ma_spread_percent <= MAX_MA_CONVERGENCE_PERCENT
-    two_month_consolidation = range_percent <= MAX_TWO_MONTH_RANGE_PERCENT
-    quiet_volume = (
-        0 < quiet_volume_ratio <= MAX_QUIET_VOLUME_RATIO
-        and latest.volume <= recent_volume_avg * 1.2
+    sharp_start = bars[-REVERSAL_SHARP_DROP_DAYS - 1]
+    sharp_drop_percent = (
+        ((sharp_start.close - stop_bar.low) / sharp_start.close) * 100
+        if sharp_start.close > 0
+        else 0.0
     )
-    if not (ma_converged and two_month_consolidation and quiet_volume):
+    decline_bars = bars[:-1] if latest_confirms_previous else bars
+    consecutive_down_days = _consecutive_down_days(decline_bars)
+    severe_decline = (
+        drawdown_percent >= REVERSAL_MIN_DRAWDOWN_PERCENT
+        and (
+            consecutive_down_days >= REVERSAL_MIN_CONSECUTIVE_DOWN_DAYS
+            or sharp_drop_percent >= REVERSAL_SHARP_DROP_PERCENT
+        )
+    )
+
+    stop_volume_ratio = float(stop_bar.volume) / float(before_stop_bar.volume)
+    stop_volume_confirmed = stop_volume_ratio >= REVERSAL_VOLUME_MULTIPLE
+    stop_candle_confirmed = _is_stopping_candle(stop_bar)
+    low_zone = stop_bar.low <= recent_low * 1.03
+    stop_signal_confirmed = (
+        severe_decline
+        and low_zone
+        and stop_volume_confirmed
+        and stop_candle_confirmed
+        and stop_bar.volume >= MIN_TRADE_VOLUME_SHARES
+    )
+    if not stop_signal_confirmed:
         return None
 
     context = _range_context(
         bars,
-        range_high=range_high,
-        range_low=range_low,
-        range_high_index=range_high_index,
-        range_low_index=range_low_index,
+        range_high=recent_high,
+        range_low=stop_bar.low,
+        range_high_index=recent_high_index,
+        range_low_index=recent_low_index,
     )
     if context is None:
         return None
 
-    tightness_bonus = max(0.0, MAX_MA_CONVERGENCE_PERCENT - ma_spread_percent) * 3
-    range_bonus = max(0.0, MAX_TWO_MONTH_RANGE_PERCENT - range_percent) * 0.8
-    volume_bonus = max(0.0, MAX_QUIET_VOLUME_RATIO - quiet_volume_ratio) * 18
-    proximity_bonus = max(0.0, 6.0 - max(0.0, breakout_distance_percent)) * 1.2
-    score = round(
-        min(92.0, 72.0 + tightness_bonus + range_bonus + volume_bonus + proximity_bonus)
+    confirmed_buy = (
+        latest_confirms_previous
+        and latest.close > latest.open
+        and latest.volume >= MIN_TRADE_VOLUME_SHARES
     )
+    if confirmed_buy:
+        level = SignalLevel.CONFIRMED
+        timing_status = "READY"
+        timing_note = (
+            "急跌超過15%後出現低檔爆量止跌K，今日上漲收盤突破"
+            "前一日止跌K最高點，搶反彈確認買點成立；若跌破前一日K最低點出場。"
+        )
+        trigger_price = stop_bar.high
+        score = 88
+    else:
+        level = SignalLevel.WATCH
+        timing_status = "WAIT_CONFIRMATION"
+        timing_note = (
+            "急跌後已出現低檔爆量止跌K，先列觀察；等待隔日上漲收盤突破"
+            "止跌K最高點才確認，未確認前不追。"
+        )
+        trigger_price = stop_bar.high
+        score = 74
 
     return _signal(
-        strategy="MA_CONSOLIDATION",
-        level=SignalLevel.WATCH,
+        strategy="BOTTOM_REVERSAL",
+        level=level,
         bars=bars,
         context=context,
         score=score,
-        trigger_price=range_high,
-        timing_status="WAIT_CONFIRMATION",
-        timing_note=(
-            "均線糾結且兩個月以上低量盤整，先列入提前觀察；"
-            "等待放量紅K收盤突破箱頂後，才視為可能起漲確認。"
-        ),
+        trigger_price=trigger_price,
+        timing_status=timing_status,
+        timing_note=timing_note,
         reasons=[
-            f"近{MA_CONSOLIDATION_DAYS}個交易日盤整，箱型震幅 {range_percent:.1f}%",
-            f"5/10/20/60日均線糾結，最大乖離 {ma_spread_percent:.1f}%",
-            f"近20日均量為前40日均量的 {quiet_volume_ratio:.2f} 倍",
-            f"成交張數 {latest_volume_lots:.0f} 張，近20日均量 {recent_volume_lots:.0f} 張",
-            "目前屬低量潛伏觀察，不是直接買點；等放量紅K突破箱頂再確認",
+            f"近{REVERSAL_LOOKBACK_DAYS}日高點回落 {drawdown_percent:.1f}%，超過15%",
+            f"止跌K成交量為前一日 {stop_volume_ratio:.2f} 倍，符合低檔爆大量",
+            "止跌K型態符合長下影線、十字線或實體紅K棒",
+            (
+                "上漲收盤突破前一日止跌K最高點，確認買點成立"
+                if confirmed_buy
+                else "等待上漲收盤突破前一日止跌K最高點"
+            ),
+            "跌破前一日K線最低點視為搶反彈失敗，必須出場",
         ],
         extra_metrics={
-            "ma60": ma60,
-            "ma_spread_percent": ma_spread_percent,
-            "consolidation_days": float(MA_CONSOLIDATION_DAYS),
-            "range_high": range_high,
-            "range_low": range_low,
-            "range_percent": range_percent,
-            "quiet_volume_ratio": quiet_volume_ratio,
-            "recent_volume_avg": recent_volume_avg,
-            "previous_volume_avg": previous_volume_avg,
-            "latest_volume_lots": latest_volume_lots,
-            "recent_volume_lots": recent_volume_lots,
-            "breakout_distance_percent": breakout_distance_percent,
-            "ma_converged": ma_converged,
-            "two_month_consolidation": two_month_consolidation,
-            "quiet_volume": quiet_volume,
+            "latest_volume_lots": latest.volume / 1000,
+            "stop_volume_lots": stop_bar.volume / 1000,
+            "minimum_volume_lots": MIN_TRADE_VOLUME_LOTS,
+            "drawdown_percent": drawdown_percent,
+            "sharp_drop_percent": sharp_drop_percent,
+            "consecutive_down_days": float(consecutive_down_days),
+            "stop_volume_ratio": stop_volume_ratio,
+            "stop_volume_confirmed": stop_volume_confirmed,
+            "stop_candle_confirmed": stop_candle_confirmed,
+            "low_zone": low_zone,
+            "previous_stop_high": stop_bar.high,
+            "previous_stop_low": stop_bar.low,
+            "confirmed_buy": confirmed_buy,
         },
     )
 
@@ -690,6 +739,6 @@ def scan_bars(
         trend_confirmation_signal(bars),
         pullback_resume_signal(bars),
         consolidation_signal(bars),
-        ma_consolidation_signal(bars),
+        bottom_reversal_signal(bars),
     ]
     return [signal for signal in signals if signal is not None]

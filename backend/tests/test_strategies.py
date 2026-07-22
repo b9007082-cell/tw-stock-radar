@@ -2,8 +2,8 @@ from datetime import date, timedelta
 
 from app.domain import Bar, SignalLevel
 from app.services.strategies import (
+    bottom_reversal_signal,
     consolidation_signal,
-    ma_consolidation_signal,
     pullback_resume_signal,
     scan_bars,
     trend_confirmation_signal,
@@ -75,13 +75,37 @@ def _breakout_bars(level: SignalLevel) -> list[Bar]:
     return bars
 
 
-def _ma_consolidation_bars() -> list[Bar]:
+def _bottom_reversal_watch_bars() -> list[Bar]:
     bars: list[Bar] = []
-    for index in range(25):
-        bars.append(_bar(index, 100 + (index % 3 - 1) * 0.2, 1_600_000))
-    closes = [99.2, 100.4, 101.0, 100.1, 98.9, 99.8, 100.6, 99.6]
-    for index in range(40):
-        bars.append(_bar(len(bars), closes[index % len(closes)], 650_000))
+    for index in range(65):
+        bars.append(_bar(index, 120 - index * 0.1, 2_400_000))
+    for close in (118, 114, 110, 105, 99):
+        bars.append(_bar(len(bars), close, 1_200_000))
+    stop = Bar(
+        date=date(2026, 1, 1) + timedelta(days=len(bars)),
+        open=96,
+        high=98,
+        low=90,
+        close=97,
+        volume=3_000_000,
+        turnover=80_000_000,
+    )
+    bars.append(stop)
+    return bars
+
+
+def _bottom_reversal_confirmed_bars() -> list[Bar]:
+    bars = _bottom_reversal_watch_bars()
+    confirm = Bar(
+        date=date(2026, 1, 1) + timedelta(days=len(bars)),
+        open=97.5,
+        high=101,
+        low=96,
+        close=100,
+        volume=3_200_000,
+        turnover=90_000_000,
+    )
+    bars.append(confirm)
     return bars
 
 
@@ -240,47 +264,40 @@ def test_consolidation_without_breakout_volume_is_rejected() -> None:
     assert consolidation_signal(bars) is None
 
 
-def test_ma_consolidation_finds_two_month_low_volume_ma_convergence() -> None:
-    signal = ma_consolidation_signal(_ma_consolidation_bars())
+def test_bottom_reversal_finds_low_volume_stop_signal() -> None:
+    signal = bottom_reversal_signal(_bottom_reversal_watch_bars())
     assert signal is not None
-    assert signal.strategy == "MA_CONSOLIDATION"
+    assert signal.strategy == "BOTTOM_REVERSAL"
     assert signal.level == SignalLevel.WATCH
     assert signal.executable is False
-    assert signal.metrics["ma_converged"] is True
-    assert signal.metrics["two_month_consolidation"] is True
-    assert signal.metrics["quiet_volume"] is True
-    assert float(signal.metrics["latest_volume_lots"]) == 650
+    assert signal.metrics["drawdown_percent"] >= 15
+    assert signal.metrics["stop_volume_ratio"] >= 2
+    assert signal.metrics["stop_candle_confirmed"] is True
 
 
-def test_ma_consolidation_rejects_active_volume() -> None:
-    bars = _ma_consolidation_bars()
-    for index in range(len(bars) - 20, len(bars)):
-        original = bars[index]
-        bars[index] = Bar(
-            date=original.date,
-            open=original.open,
-            high=original.high,
-            low=original.low,
-            close=original.close,
-            volume=1_700_000,
-            turnover=original.turnover,
-        )
-    assert ma_consolidation_signal(bars) is None
+def test_bottom_reversal_confirms_after_breaking_stop_candle_high() -> None:
+    signal = bottom_reversal_signal(_bottom_reversal_confirmed_bars())
+    assert signal is not None
+    assert signal.level == SignalLevel.CONFIRMED
+    assert signal.executable is True
+    assert signal.trigger_price == 98
+    assert signal.stop_price == 90
+    assert signal.metrics["confirmed_buy"] is True
 
 
-def test_ma_consolidation_rejects_wide_range() -> None:
-    bars = _ma_consolidation_bars()
-    original = bars[-10]
-    bars[-10] = Bar(
+def test_bottom_reversal_rejects_without_double_volume() -> None:
+    bars = _bottom_reversal_confirmed_bars()
+    original = bars[-2]
+    bars[-2] = Bar(
         date=original.date,
         open=original.open,
-        high=125,
+        high=original.high,
         low=original.low,
         close=original.close,
-        volume=original.volume,
+        volume=2_300_000,
         turnover=original.turnover,
     )
-    assert ma_consolidation_signal(bars) is None
+    assert bottom_reversal_signal(bars) is None
 
 
 def test_scan_keeps_direction_and_buy_point_signals() -> None:

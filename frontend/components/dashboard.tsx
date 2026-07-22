@@ -27,14 +27,14 @@ const strategyLabel: Record<Signal["strategy"], string> = {
   TREND_CONFIRMATION: "多頭確認",
   PULLBACK_RESUME: "回後買上漲",
   CONSOLIDATION_BREAKOUT: "盤整突破",
-  MA_CONSOLIDATION: "均線糾結",
+  BOTTOM_REVERSAL: "搶反彈",
 };
 
 const strategyTabs = [
   ["ALL", "全部策略"],
   ["PULLBACK_RESUME", "回後買上漲"],
   ["CONSOLIDATION_BREAKOUT", "盤整突破"],
-  ["MA_CONSOLIDATION", "均線糾結"],
+  ["BOTTOM_REVERSAL", "搶反彈"],
 ] as const;
 
 const levelOrder: Record<SignalLevel, number> = {
@@ -183,8 +183,8 @@ function RecommendationBoard({
       <div className="divide-y divide-slate-800">
         {items.map((item) => {
           const volumeRatio = metricNumber(item, "volume_ratio");
-          const rangePercent = metricNumber(item, "range_percent");
-          const maSpread = metricNumber(item, "ma_spread_percent");
+          const drawdownPercent = metricNumber(item, "drawdown_percent");
+          const stopVolumeRatio = metricNumber(item, "stop_volume_ratio");
           return (
             <button
               key={`${item.strategy}-${item.symbol}`}
@@ -206,12 +206,12 @@ function RecommendationBoard({
                   <span>
                     {item.strategy === "PULLBACK_RESUME"
                       ? `${item.reward_risk_ratio?.toFixed(2) ?? "—"}R`
-                      : item.strategy === "MA_CONSOLIDATION"
-                        ? `箱幅 ${rangePercent?.toFixed(1) ?? "—"}%`
+                      : item.strategy === "BOTTOM_REVERSAL"
+                        ? `跌幅 ${drawdownPercent?.toFixed(1) ?? "—"}%`
                         : `量比 ${volumeRatio?.toFixed(2) ?? "—"}倍`}
                   </span>
-                  {item.strategy === "MA_CONSOLIDATION" && (
-                    <span>均線差 {maSpread?.toFixed(1) ?? "—"}%</span>
+                  {item.strategy === "BOTTOM_REVERSAL" && (
+                    <span>爆量 {stopVolumeRatio?.toFixed(2) ?? "—"}倍</span>
                   )}
                   </span>
                 </span>
@@ -356,7 +356,7 @@ export function Dashboard() {
             台股起漲雷達
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            回後買上漲 × 盤整突破 × 均線糾結｜依公開教學原則量化
+            回後買上漲 × 盤整突破 × 搶反彈｜依公開教學原則量化
           </p>
         </div>
         <div className="text-left text-xs leading-6 text-slate-400 sm:text-right">
@@ -415,9 +415,9 @@ export function Dashboard() {
           onSelect={selectRecommendation}
         />
         <RecommendationBoard
-          title="均線糾結 Top 10"
-          subtitle="盤整 ≥ 2個月｜均線收斂｜低量提前觀察"
-          items={recommendations?.ma_consolidation ?? []}
+          title="搶反彈 Top 10"
+          subtitle="急跌 ≥ 15%｜低檔爆量 ≥ 2倍｜突破止跌K高點"
+          items={recommendations?.bottom_reversal ?? []}
           accent="amber"
           onSelect={selectRecommendation}
         />
