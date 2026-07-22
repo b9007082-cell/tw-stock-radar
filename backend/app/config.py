@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     app_name: str = "台股起漲雷達"
     database_url: str = "sqlite:///./data/stock_scanner.db"
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
-    strategy_version: str = "2026.07.v13"
+    strategy_version: str = "2026.07.v14"
     strategy_approved: bool = False
     timezone: str = "Asia/Taipei"
     twse_url: str = (

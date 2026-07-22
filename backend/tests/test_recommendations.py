@@ -201,6 +201,7 @@ def test_lorentzian_ml_has_independent_ranking_bucket() -> None:
         extra_metrics={
             "ml_prediction": 6,
             "ml_confidence": 0.75,
+            "ml_neighbors": 6,
             "kernel_slope_percent": 1.1,
             "relative_strength_percentile": 0.82,
             "structure_risk_percent": 5.0,
@@ -210,7 +211,7 @@ def test_lorentzian_ml_has_independent_ranking_bucket() -> None:
     result = build_recommendations([mild, strong])
     items = result["lorentzian_ml"]
     assert [item["symbol"] for item in items] == ["4002", "4001"]
-    assert "ML投票 +6/8" in items[0]["ranking_reasons"]
+    assert "ML投票 +6/6" in items[0]["ranking_reasons"]
     assert items[0]["structure_risk_percent"] == 5.0
 
 

@@ -578,7 +578,7 @@ export function Dashboard() {
                 <LevelBadge level={activeSelected.level} />
               </div>
               <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/35">
-                <StockChart bars={bars} />
+                <StockChart bars={bars} signal={activeSelected} />
               </div>
               <TrendMetricsPanel signal={activeSelected} />
               <EntryTimingPanel signal={activeSelected} />

@@ -4,12 +4,13 @@ import {
   CandlestickSeries,
   ColorType,
   createChart,
+  createSeriesMarkers,
   LineSeries,
   type Time,
 } from "lightweight-charts";
 import { useEffect, useRef } from "react";
 
-import type { Bar } from "@/lib/types";
+import type { Bar, Signal } from "@/lib/types";
 
 function movingAverage(bars: Bar[], period: number) {
   return bars.flatMap((bar, index) => {
@@ -24,7 +25,35 @@ function movingAverage(bars: Bar[], period: number) {
   });
 }
 
-export function StockChart({ bars }: { bars: Bar[] }) {
+function signalMarker(signal: Signal) {
+  if (signal.level === "CONFIRMED") {
+    return {
+      time: signal.signal_date as Time,
+      position: "belowBar" as const,
+      color: "#4ee0a0",
+      shape: "arrowUp" as const,
+      text: "買",
+    };
+  }
+  if (signal.level === "TRIAL") {
+    return {
+      time: signal.signal_date as Time,
+      position: "belowBar" as const,
+      color: "#f5b942",
+      shape: "circle" as const,
+      text: "試",
+    };
+  }
+  return {
+    time: signal.signal_date as Time,
+    position: "belowBar" as const,
+    color: "#6ea8fe",
+    shape: "circle" as const,
+    text: "等",
+  };
+}
+
+export function StockChart({ bars, signal }: { bars: Bar[]; signal?: Signal | null }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -59,6 +88,29 @@ export function StockChart({ bars }: { bars: Bar[] }) {
         close: bar.close,
       })),
     );
+    if (signal) {
+      createSeriesMarkers(candles, [signalMarker(signal)]);
+      if (signal.trigger_price != null) {
+        candles.createPriceLine({
+          price: signal.trigger_price,
+          color: "#4ee0a0",
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: "確認價",
+        });
+      }
+      if (signal.stop_price != null) {
+        candles.createPriceLine({
+          price: signal.stop_price,
+          color: "#fb7185",
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: "停損",
+        });
+      }
+    }
     const ma5 = chart.addSeries(LineSeries, {
       color: "#f5b942",
       lineWidth: 2,
@@ -83,8 +135,7 @@ export function StockChart({ bars }: { bars: Bar[] }) {
       observer.disconnect();
       chart.remove();
     };
-  }, [bars]);
+  }, [bars, signal]);
 
   return <div ref={containerRef} className="w-full" />;
 }
-

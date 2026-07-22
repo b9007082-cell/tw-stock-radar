@@ -5,7 +5,7 @@ from typing import Any
 
 
 RECOMMENDATION_LIMIT = 10
-RECOMMENDATION_VERSION = "2026.07.r4"
+RECOMMENDATION_VERSION = "2026.07.r5"
 MAX_STRUCTURE_RISK_PERCENT = 8.0
 MIN_PULLBACK_REWARD_RISK = 1.5
 MAX_LORENTZIAN_RISK_PERCENT = 10.0
@@ -173,6 +173,7 @@ def _lorentzian_score(
     metrics: Mapping[str, Any],
 ) -> tuple[float, float, list[str]] | None:
     prediction = _number(metrics.get("ml_prediction"))
+    neighbors = _number(metrics.get("ml_neighbors")) or 6.0
     confidence = _number(metrics.get("ml_confidence"))
     kernel_slope = _number(metrics.get("kernel_slope_percent")) or 0.0
     rs_percentile = _number(metrics.get("relative_strength_percentile")) or 0.0
@@ -186,7 +187,7 @@ def _lorentzian_score(
         or risk_percent > MAX_LORENTZIAN_RISK_PERCENT
     ):
         return None
-    prediction_score = 25 * _clamp(prediction / 8.0)
+    prediction_score = 25 * _clamp(prediction / neighbors)
     confidence_score = 30 * _clamp(confidence)
     kernel_score = 20 * _clamp((kernel_slope + 0.5) / 2.0)
     relative_strength_score = 15 * _clamp((rs_percentile - 0.45) / 0.35)
@@ -199,7 +200,7 @@ def _lorentzian_score(
         + risk_component
     )
     reasons = [
-        f"ML投票 {prediction:+.0f}/8",
+        f"ML投票 {prediction:+.0f}/{neighbors:.0f}",
         f"信心 {confidence * 100:.0f}%",
         f"Kernel斜率 {kernel_slope:.2f}%",
         f"相對強度 {rs_percentile * 100:.0f}%",
