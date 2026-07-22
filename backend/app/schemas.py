@@ -43,6 +43,7 @@ class RecommendationsResponse(BaseModel):
     pullback_resume: list[RecommendationItemResponse]
     consolidation_breakout: list[RecommendationItemResponse]
     bottom_reversal: list[RecommendationItemResponse]
+    lorentzian_ml: list[RecommendationItemResponse]
 
 
 class BarResponse(BaseModel):

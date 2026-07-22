@@ -27,7 +27,8 @@ export interface Signal {
     | "TREND_CONFIRMATION"
     | "PULLBACK_RESUME"
     | "CONSOLIDATION_BREAKOUT"
-    | "BOTTOM_REVERSAL";
+    | "BOTTOM_REVERSAL"
+    | "LORENTZIAN_ML";
   strategy_version: string;
   level: SignalLevel;
   score: number;
@@ -61,6 +62,7 @@ export interface DailyRecommendations {
   pullback_resume: RecommendationItem[];
   consolidation_breakout: RecommendationItem[];
   bottom_reversal: RecommendationItem[];
+  lorentzian_ml: RecommendationItem[];
 }
 
 export interface Bar {

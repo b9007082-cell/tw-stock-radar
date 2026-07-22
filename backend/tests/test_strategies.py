@@ -1,9 +1,11 @@
 from datetime import date, timedelta
+import math
 
 from app.domain import Bar, SignalLevel
 from app.services.strategies import (
     bottom_reversal_signal,
     consolidation_signal,
+    lorentzian_ml_signal,
     pullback_resume_signal,
     scan_bars,
     trend_confirmation_signal,
@@ -106,6 +108,34 @@ def _bottom_reversal_confirmed_bars() -> list[Bar]:
         turnover=90_000_000,
     )
     bars.append(confirm)
+    return bars
+
+
+def _lorentzian_bars(volume: int = 3_000_000) -> list[Bar]:
+    bars: list[Bar] = []
+    for index in range(120):
+        close = 50 + index * 0.25 + math.sin(index / 4) * 1.2
+        bars.append(
+            Bar(
+                date=date(2026, 1, 1) + timedelta(days=index),
+                open=close - 0.2,
+                high=close + 0.4,
+                low=close - 0.4,
+                close=close,
+                volume=volume,
+                turnover=100_000_000,
+            )
+        )
+    latest = bars[-1]
+    bars[-1] = Bar(
+        date=latest.date,
+        open=latest.close - 0.4,
+        high=latest.close + 1.0,
+        low=latest.close - 0.5,
+        close=bars[-2].high + 0.5,
+        volume=volume,
+        turnover=100_000_000,
+    )
     return bars
 
 
@@ -298,6 +328,20 @@ def test_bottom_reversal_rejects_without_double_volume() -> None:
         turnover=original.turnover,
     )
     assert bottom_reversal_signal(bars) is None
+
+
+def test_lorentzian_ml_finds_positive_daily_classifier_signal() -> None:
+    signal = lorentzian_ml_signal(_lorentzian_bars(), 0.8)
+    assert signal is not None
+    assert signal.strategy == "LORENTZIAN_ML"
+    assert signal.level in {SignalLevel.WATCH, SignalLevel.TRIAL, SignalLevel.CONFIRMED}
+    assert signal.metrics["ml_prediction"] > 0
+    assert signal.metrics["kernel_bullish"] is True
+    assert signal.metrics["latest_volume_lots"] >= 2000
+
+
+def test_lorentzian_ml_rejects_low_liquidity() -> None:
+    assert lorentzian_ml_signal(_lorentzian_bars(volume=1_900_000), 0.8) is None
 
 
 def test_scan_keeps_direction_and_buy_point_signals() -> None:

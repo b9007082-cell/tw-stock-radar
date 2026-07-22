@@ -5,9 +5,10 @@ from typing import Any
 
 
 RECOMMENDATION_LIMIT = 10
-RECOMMENDATION_VERSION = "2026.07.r3"
+RECOMMENDATION_VERSION = "2026.07.r4"
 MAX_STRUCTURE_RISK_PERCENT = 8.0
 MIN_PULLBACK_REWARD_RISK = 1.5
+MAX_LORENTZIAN_RISK_PERCENT = 10.0
 
 
 def _number(value: Any) -> float | None:
@@ -167,6 +168,49 @@ def _bottom_reversal_score(
     return round(score, 1), reasons
 
 
+def _lorentzian_score(
+    signal: Mapping[str, Any],
+    metrics: Mapping[str, Any],
+) -> tuple[float, float, list[str]] | None:
+    prediction = _number(metrics.get("ml_prediction"))
+    confidence = _number(metrics.get("ml_confidence"))
+    kernel_slope = _number(metrics.get("kernel_slope_percent")) or 0.0
+    rs_percentile = _number(metrics.get("relative_strength_percentile")) or 0.0
+    risk_percent = _number(metrics.get("structure_risk_percent"))
+    if (
+        prediction is None
+        or confidence is None
+        or risk_percent is None
+        or prediction <= 0
+        or risk_percent <= 0
+        or risk_percent > MAX_LORENTZIAN_RISK_PERCENT
+    ):
+        return None
+    prediction_score = 25 * _clamp(prediction / 8.0)
+    confidence_score = 30 * _clamp(confidence)
+    kernel_score = 20 * _clamp((kernel_slope + 0.5) / 2.0)
+    relative_strength_score = 15 * _clamp((rs_percentile - 0.45) / 0.35)
+    risk_component = _risk_score(min(risk_percent, 8.0), weight=10.0)
+    score = (
+        prediction_score
+        + confidence_score
+        + kernel_score
+        + relative_strength_score
+        + risk_component
+    )
+    reasons = [
+        f"ML投票 {prediction:+.0f}/8",
+        f"信心 {confidence * 100:.0f}%",
+        f"Kernel斜率 {kernel_slope:.2f}%",
+        f"相對強度 {rs_percentile * 100:.0f}%",
+        f"結構風險 {risk_percent:.2f}%",
+    ]
+    latest_volume_lots = _number(metrics.get("latest_volume_lots"))
+    if latest_volume_lots is not None:
+        reasons.append(f"成交 {latest_volume_lots:.0f}張")
+    return round(score, 1), round(risk_percent, 2), reasons
+
+
 def build_recommendations(
     signals: Sequence[Mapping[str, Any]],
     *,
@@ -176,6 +220,7 @@ def build_recommendations(
         "pullback_resume": [],
         "consolidation_breakout": [],
         "bottom_reversal": [],
+        "lorentzian_ml": [],
     }
     for signal in signals:
         strategy = str(signal.get("strategy", ""))
@@ -199,6 +244,24 @@ def build_recommendations(
                          / float(signal["close"])) * 100,
                         2,
                     ),
+                    "reward_risk_ratio": None,
+                    "ranking_reasons": reasons,
+                }
+            )
+            continue
+        if strategy == "LORENTZIAN_ML":
+            if level not in {"WATCH", "TRIAL", "CONFIRMED"}:
+                continue
+            result = _lorentzian_score(signal, metrics)
+            if result is None:
+                continue
+            score, risk_percent, reasons = result
+            grouped["lorentzian_ml"].append(
+                {
+                    **signal,
+                    "rank": 0,
+                    "recommendation_score": score,
+                    "structure_risk_percent": risk_percent,
                     "reward_risk_ratio": None,
                     "ranking_reasons": reasons,
                 }

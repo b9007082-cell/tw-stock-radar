@@ -28,6 +28,7 @@ const strategyLabel: Record<Signal["strategy"], string> = {
   PULLBACK_RESUME: "回後買上漲",
   CONSOLIDATION_BREAKOUT: "盤整突破",
   BOTTOM_REVERSAL: "搶反彈",
+  LORENTZIAN_ML: "Lorentzian ML",
 };
 
 const strategyTabs = [
@@ -35,6 +36,7 @@ const strategyTabs = [
   ["PULLBACK_RESUME", "回後買上漲"],
   ["CONSOLIDATION_BREAKOUT", "盤整突破"],
   ["BOTTOM_REVERSAL", "搶反彈"],
+  ["LORENTZIAN_ML", "Lorentzian ML"],
 ] as const;
 
 const levelOrder: Record<SignalLevel, number> = {
@@ -165,7 +167,7 @@ function RecommendationBoard({
   title: string;
   subtitle: string;
   items: RecommendationItem[];
-  accent: "emerald" | "cyan" | "amber";
+  accent: "emerald" | "cyan" | "amber" | "violet";
   onSelect: (item: RecommendationItem) => void;
 }) {
   const accentClass =
@@ -173,7 +175,9 @@ function RecommendationBoard({
       ? "text-emerald-300"
       : accent === "cyan"
         ? "text-cyan-300"
-        : "text-amber-300";
+        : accent === "amber"
+          ? "text-amber-300"
+          : "text-violet-300";
   return (
     <article className="overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/70 backdrop-blur">
       <div className="border-b border-slate-800 px-4 py-3">
@@ -185,6 +189,8 @@ function RecommendationBoard({
           const volumeRatio = metricNumber(item, "volume_ratio");
           const drawdownPercent = metricNumber(item, "drawdown_percent");
           const stopVolumeRatio = metricNumber(item, "stop_volume_ratio");
+          const mlPrediction = metricNumber(item, "ml_prediction");
+          const mlConfidence = metricNumber(item, "ml_confidence");
           return (
             <button
               key={`${item.strategy}-${item.symbol}`}
@@ -208,10 +214,17 @@ function RecommendationBoard({
                       ? `${item.reward_risk_ratio?.toFixed(2) ?? "—"}R`
                       : item.strategy === "BOTTOM_REVERSAL"
                         ? `跌幅 ${drawdownPercent?.toFixed(1) ?? "—"}%`
-                        : `量比 ${volumeRatio?.toFixed(2) ?? "—"}倍`}
+                        : item.strategy === "LORENTZIAN_ML"
+                          ? `ML ${mlPrediction?.toFixed(0) ?? "—"}`
+                          : `量比 ${volumeRatio?.toFixed(2) ?? "—"}倍`}
                   </span>
                   {item.strategy === "BOTTOM_REVERSAL" && (
                     <span>爆量 {stopVolumeRatio?.toFixed(2) ?? "—"}倍</span>
+                  )}
+                  {item.strategy === "LORENTZIAN_ML" && (
+                    <span>
+                      信心 {mlConfidence == null ? "—" : `${(mlConfidence * 100).toFixed(0)}%`}
+                    </span>
                   )}
                   </span>
                 </span>
@@ -356,7 +369,7 @@ export function Dashboard() {
             台股起漲雷達
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            回後買上漲 × 盤整突破 × 搶反彈｜依公開教學原則量化
+            回後買上漲 × 盤整突破 × 搶反彈 × Lorentzian ML｜依公開教學原則量化
           </p>
         </div>
         <div className="text-left text-xs leading-6 text-slate-400 sm:text-right">
@@ -399,7 +412,7 @@ export function Dashboard() {
         ))}
       </section>
 
-      <section className="mb-5 grid gap-4 xl:grid-cols-3">
+      <section className="mb-5 grid gap-4 xl:grid-cols-4">
         <RecommendationBoard
           title="回後買上漲 Top 10"
           subtitle="確認優先｜風險 ≤ 8%｜前高空間 ≥ 1.5R"
@@ -419,6 +432,13 @@ export function Dashboard() {
           subtitle="急跌 ≥ 15%｜低檔爆量 ≥ 2倍｜突破止跌K高點"
           items={recommendations?.bottom_reversal ?? []}
           accent="amber"
+          onSelect={selectRecommendation}
+        />
+        <RecommendationBoard
+          title="Lorentzian ML Top 10"
+          subtitle="近鄰投票｜Kernel趨勢｜研究輔助訊號"
+          items={recommendations?.lorentzian_ml ?? []}
+          accent="violet"
           onSelect={selectRecommendation}
         />
       </section>

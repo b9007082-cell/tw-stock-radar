@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
+import math
 
 from app.domain import Bar, SignalLevel, StrategySignal
 from app.services.indicators import confirmed_swings, percent_change, sma
@@ -16,6 +17,10 @@ REVERSAL_SHARP_DROP_DAYS = 5
 REVERSAL_SHARP_DROP_PERCENT = 8.0
 REVERSAL_MIN_CONSECUTIVE_DOWN_DAYS = 3
 REVERSAL_VOLUME_MULTIPLE = 2.0
+LORENTZIAN_NEIGHBORS = 8
+LORENTZIAN_LOOKBACK_BARS = 160
+LORENTZIAN_MIN_BARS = 80
+LORENTZIAN_MAX_RISK_PERCENT = 10.0
 
 
 @dataclass(frozen=True)
@@ -731,14 +736,355 @@ def bottom_reversal_signal(
     )
 
 
+def _rsi_series(closes: Sequence[float], period: int) -> list[float | None]:
+    result: list[float | None] = [None] * len(closes)
+    if len(closes) <= period:
+        return result
+    gains: list[float] = []
+    losses: list[float] = []
+    for index in range(1, period + 1):
+        change = closes[index] - closes[index - 1]
+        gains.append(max(change, 0.0))
+        losses.append(max(-change, 0.0))
+    avg_gain = _average(gains)
+    avg_loss = _average(losses)
+    result[period] = 100.0 if avg_loss == 0 else 100.0 - (100.0 / (1.0 + avg_gain / avg_loss))
+    for index in range(period + 1, len(closes)):
+        change = closes[index] - closes[index - 1]
+        gain = max(change, 0.0)
+        loss = max(-change, 0.0)
+        avg_gain = ((avg_gain * (period - 1)) + gain) / period
+        avg_loss = ((avg_loss * (period - 1)) + loss) / period
+        result[index] = 100.0 if avg_loss == 0 else 100.0 - (100.0 / (1.0 + avg_gain / avg_loss))
+    return result
+
+
+def _cci_series(bars: Sequence[Bar], period: int) -> list[float | None]:
+    typical_prices = [(bar.high + bar.low + bar.close) / 3 for bar in bars]
+    result: list[float | None] = [None] * len(bars)
+    for index in range(period - 1, len(bars)):
+        window = typical_prices[index - period + 1 : index + 1]
+        mean = _average(window)
+        mean_deviation = _average([abs(value - mean) for value in window])
+        if mean_deviation > 0:
+            result[index] = (typical_prices[index] - mean) / (0.015 * mean_deviation)
+    return result
+
+
+def _adx_series(bars: Sequence[Bar], period: int) -> list[float | None]:
+    result: list[float | None] = [None] * len(bars)
+    if len(bars) < period * 2 + 1:
+        return result
+    true_ranges: list[float] = [0.0]
+    plus_dm: list[float] = [0.0]
+    minus_dm: list[float] = [0.0]
+    for index in range(1, len(bars)):
+        current = bars[index]
+        previous = bars[index - 1]
+        up_move = current.high - previous.high
+        down_move = previous.low - current.low
+        true_ranges.append(
+            max(
+                current.high - current.low,
+                abs(current.high - previous.close),
+                abs(current.low - previous.close),
+            )
+        )
+        plus_dm.append(up_move if up_move > down_move and up_move > 0 else 0.0)
+        minus_dm.append(down_move if down_move > up_move and down_move > 0 else 0.0)
+
+    smoothed_tr = sum(true_ranges[1 : period + 1])
+    smoothed_plus = sum(plus_dm[1 : period + 1])
+    smoothed_minus = sum(minus_dm[1 : period + 1])
+    dx_values: list[float | None] = [None] * len(bars)
+    for index in range(period, len(bars)):
+        if index > period:
+            smoothed_tr = smoothed_tr - (smoothed_tr / period) + true_ranges[index]
+            smoothed_plus = smoothed_plus - (smoothed_plus / period) + plus_dm[index]
+            smoothed_minus = smoothed_minus - (smoothed_minus / period) + minus_dm[index]
+        plus_di = 100 * smoothed_plus / smoothed_tr if smoothed_tr else 0.0
+        minus_di = 100 * smoothed_minus / smoothed_tr if smoothed_tr else 0.0
+        denominator = plus_di + minus_di
+        dx_values[index] = (
+            100 * abs(plus_di - minus_di) / denominator if denominator else 0.0
+        )
+
+    first_adx_index = period * 2 - 1
+    first_window = [
+        value for value in dx_values[period:first_adx_index + 1] if value is not None
+    ]
+    if len(first_window) != period:
+        return result
+    adx = _average(first_window)
+    result[first_adx_index] = adx
+    for index in range(first_adx_index + 1, len(bars)):
+        dx = dx_values[index]
+        if dx is not None:
+            adx = ((adx * (period - 1)) + dx) / period
+            result[index] = adx
+    return result
+
+
+def _wavetrend_series(
+    bars: Sequence[Bar],
+    channel_length: int = 10,
+    average_length: int = 11,
+) -> list[float | None]:
+    hlc3 = [(bar.high + bar.low + bar.close) / 3 for bar in bars]
+    esa = _ema(hlc3, channel_length)
+    absolute_deviation = [abs(price - avg) for price, avg in zip(hlc3, esa, strict=True)]
+    de = _ema(absolute_deviation, channel_length)
+    ci = [
+        0.0 if deviation == 0 else (price - avg) / (0.015 * deviation)
+        for price, avg, deviation in zip(hlc3, esa, de, strict=True)
+    ]
+    wt = _ema(ci, average_length)
+    result: list[float | None] = [None] * len(bars)
+    warmup = channel_length + average_length
+    for index, value in enumerate(wt):
+        if index >= warmup:
+            result[index] = value
+    return result
+
+
+def _bounded(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
+
+
+def _lorentzian_features(
+    bars: Sequence[Bar],
+) -> list[tuple[float, float, float, float, float] | None]:
+    closes = [bar.close for bar in bars]
+    rsi14 = _rsi_series(closes, 14)
+    wt = _wavetrend_series(bars)
+    cci20 = _cci_series(bars, 20)
+    adx20 = _adx_series(bars, 20)
+    rsi9 = _rsi_series(closes, 9)
+    features: list[tuple[float, float, float, float, float] | None] = []
+    for values in zip(rsi14, wt, cci20, adx20, rsi9, strict=True):
+        rsi_value, wt_value, cci_value, adx_value, rsi_fast = values
+        if None in values:
+            features.append(None)
+            continue
+        features.append(
+            (
+                float(rsi_value),
+                _bounded(float(wt_value) + 50.0, 0.0, 100.0),
+                _bounded((float(cci_value) + 200.0) / 4.0, 0.0, 100.0),
+                _bounded(float(adx_value), 0.0, 100.0),
+                float(rsi_fast),
+            )
+        )
+    return features
+
+
+def _lorentzian_prediction_at(
+    bars: Sequence[Bar],
+    features: Sequence[tuple[float, float, float, float, float] | None],
+    index: int,
+) -> tuple[int, int, float] | None:
+    if index < 4 or index >= len(bars) or features[index] is None:
+        return None
+    closes = [bar.close for bar in bars]
+    training_end = index - 4
+    start = max(0, training_end - LORENTZIAN_LOOKBACK_BARS)
+    current = features[index]
+    if current is None:
+        return None
+    candidates: list[tuple[float, int]] = []
+    for candidate_index in range(start, training_end + 1):
+        historical = features[candidate_index]
+        if historical is None or candidate_index % 4 == index % 4:
+            continue
+        label = (
+            1
+            if closes[candidate_index + 4] > closes[candidate_index]
+            else -1
+            if closes[candidate_index + 4] < closes[candidate_index]
+            else 0
+        )
+        distance = sum(
+            math.log1p(abs(current_value - historical_value))
+            for current_value, historical_value in zip(current, historical, strict=True)
+        )
+        candidates.append((distance, label))
+    if len(candidates) < LORENTZIAN_NEIGHBORS:
+        return None
+    nearest = sorted(candidates, key=lambda item: item[0])[:LORENTZIAN_NEIGHBORS]
+    prediction = sum(label for _, label in nearest)
+    confidence = abs(prediction) / LORENTZIAN_NEIGHBORS
+    return prediction, len(nearest), confidence
+
+
+def _rational_quadratic_estimate(
+    values: Sequence[float],
+    index: int,
+    lookback: int = 8,
+    relative_weighting: float = 8.0,
+) -> float | None:
+    if index < 0 or index >= len(values):
+        return None
+    start = max(0, index - lookback + 1)
+    weighted_sum = 0.0
+    weight_total = 0.0
+    for sample_index in range(start, index + 1):
+        distance = index - sample_index
+        weight = (
+            1
+            + (distance * distance)
+            / (2 * relative_weighting * lookback * lookback)
+        ) ** (-relative_weighting)
+        weighted_sum += values[sample_index] * weight
+        weight_total += weight
+    return weighted_sum / weight_total if weight_total else None
+
+
+def lorentzian_ml_signal(
+    bars: Sequence[Bar],
+    relative_strength_percentile: float = 0.5,
+) -> StrategySignal | None:
+    """Daily stock-scanner adaptation of jdehorty's MPL-2.0 Lorentzian classifier.
+
+    Original concept: "Machine Learning: Lorentzian Classification v2.0"
+    by jdehorty, licensed under Mozilla Public License 2.0.
+    """
+    if len(bars) < LORENTZIAN_MIN_BARS:
+        return None
+    latest = bars[-1]
+    previous = bars[-2]
+    if latest.volume < MIN_TRADE_VOLUME_SHARES:
+        return None
+
+    closes = [bar.close for bar in bars]
+    features = _lorentzian_features(bars)
+    current = _lorentzian_prediction_at(bars, features, len(bars) - 1)
+    previous_prediction = _lorentzian_prediction_at(bars, features, len(bars) - 2)
+    if current is None:
+        return None
+    prediction, neighbors, confidence = current
+    prior_prediction = previous_prediction[0] if previous_prediction is not None else 0
+    if prediction <= 0:
+        return None
+
+    kernel_now = _rational_quadratic_estimate(closes, len(bars) - 1)
+    kernel_previous = _rational_quadratic_estimate(closes, len(bars) - 2)
+    if kernel_now is None or kernel_previous is None or kernel_previous <= 0:
+        return None
+    kernel_slope_percent = percent_change(kernel_now, kernel_previous) * 100
+    kernel_bullish = kernel_now >= kernel_previous
+    ma20_value = float(sma(closes, 20)[-1] or 0)
+    ma50_value = float(sma(closes, 50)[-1] or 0)
+    adx_value = (_adx_series(bars, 20)[-1] or 0.0)
+    rsi_value = (_rsi_series(closes, 14)[-1] or 0.0)
+    relative_strength_ok = relative_strength_percentile >= 0.45
+    trend_filter_ok = kernel_bullish and latest.close > ma20_value
+    if not trend_filter_ok or not relative_strength_ok:
+        return None
+
+    recent_lows = [bar.low for bar in bars[-20:]]
+    recent_highs = [bar.high for bar in bars[-20:]]
+    range_low = min(recent_lows)
+    range_high = max(recent_highs)
+    range_low_index = len(bars) - 20 + min(
+        range(len(recent_lows)), key=lambda index: recent_lows[index]
+    )
+    range_high_index = len(bars) - 20 + max(
+        range(len(recent_highs)), key=lambda index: recent_highs[index]
+    )
+    context = _range_context(
+        bars,
+        range_high=range_high,
+        range_low=range_low,
+        range_high_index=range_high_index,
+        range_low_index=range_low_index,
+    )
+    if context is None:
+        return None
+
+    broke_previous_high = latest.close > previous.high
+    new_positive_turn = prior_prediction <= 0 and prediction > 0
+    confirmed_buy = broke_previous_high and kernel_bullish and confidence >= 0.5
+    if confirmed_buy:
+        level = SignalLevel.CONFIRMED
+        timing_status = "READY"
+        timing_note = (
+            "Lorentzian近鄰投票轉多，Kernel估計線向上，且收盤突破前一日高點；"
+            "此為機器學習輔助確認訊號，仍需搭配停損。"
+        )
+        trigger_price = previous.high
+        score = int(min(96, 78 + confidence * 18 + max(0.0, kernel_slope_percent) * 2))
+    elif new_positive_turn:
+        level = SignalLevel.TRIAL
+        timing_status = "TRIAL_ENTRY"
+        timing_note = (
+            "Lorentzian近鄰投票剛轉多，Kernel方向向上，但尚未收盤突破前一日高點。"
+        )
+        trigger_price = previous.high
+        score = int(min(88, 70 + confidence * 16))
+    else:
+        level = SignalLevel.WATCH
+        timing_status = "WAIT_CONFIRMATION"
+        timing_note = (
+            "Lorentzian近鄰投票偏多，等待突破前一日高點或更明確的量價確認。"
+        )
+        trigger_price = previous.high
+        score = int(min(82, 64 + confidence * 14))
+
+    risk_percent, risk_valid = _risk(latest.close, context.latest_trough)
+    if risk_percent > LORENTZIAN_MAX_RISK_PERCENT:
+        return None
+
+    return _signal(
+        strategy="LORENTZIAN_ML",
+        level=level,
+        bars=bars,
+        context=context,
+        score=score,
+        trigger_price=trigger_price,
+        timing_status=timing_status,
+        timing_note=timing_note,
+        reasons=[
+            f"Lorentzian近鄰投票 {prediction:+d}/{neighbors}",
+            f"信心 {confidence * 100:.0f}%，Kernel斜率 {kernel_slope_percent:.2f}%",
+            f"成交張數 {latest.volume / 1000:.0f} 張，大於{MIN_TRADE_VOLUME_LOTS:.0f}張",
+            f"相對強度分位 {relative_strength_percentile * 100:.0f}%",
+            (
+                "收盤突破前一日高點，ML輔助買點確認"
+                if confirmed_buy
+                else "尚未突破前一日高點，先列觀察或轉強"
+            ),
+        ],
+        extra_metrics={
+            "latest_volume_lots": latest.volume / 1000,
+            "minimum_volume_lots": MIN_TRADE_VOLUME_LOTS,
+            "ml_prediction": float(prediction),
+            "ml_prior_prediction": float(prior_prediction),
+            "ml_neighbors": float(neighbors),
+            "ml_confidence": confidence,
+            "kernel_estimate": kernel_now,
+            "kernel_slope_percent": kernel_slope_percent,
+            "kernel_bullish": kernel_bullish,
+            "broke_previous_high": broke_previous_high,
+            "relative_strength_percentile": relative_strength_percentile,
+            "rsi14": float(rsi_value),
+            "adx20": float(adx_value),
+            "ma20": ma20_value,
+            "ma50": ma50_value,
+            "structure_risk_percent": risk_percent,
+            "structure_risk_valid": risk_valid,
+            "source_license_mpl_2_0": True,
+        },
+    )
+
+
 def scan_bars(
     bars: Sequence[Bar], relative_strength_percentile: float = 0.5
 ) -> list[StrategySignal]:
-    _ = relative_strength_percentile
     signals = [
         trend_confirmation_signal(bars),
         pullback_resume_signal(bars),
         consolidation_signal(bars),
         bottom_reversal_signal(bars),
+        lorentzian_ml_signal(bars, relative_strength_percentile),
     ]
     return [signal for signal in signals if signal is not None]

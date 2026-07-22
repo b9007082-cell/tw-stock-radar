@@ -10,7 +10,7 @@
   "profit_factor": 0.0,
   "sharpe_like": 0.0,
   "strategy": "TREND_CONFIRMATION",
-  "strategy_version": "2026.07.v12",
+  "strategy_version": "2026.07.v13",
   "symbol": "1709",
   "total_return": 0.0,
   "trades": 0,

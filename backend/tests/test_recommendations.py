@@ -176,6 +176,44 @@ def test_bottom_reversal_ranks_by_deeper_drop_and_volume() -> None:
     assert items[0]["structure_risk_percent"] == 4.0
 
 
+def test_lorentzian_ml_has_independent_ranking_bucket() -> None:
+    mild = _signal(
+        "4001",
+        "LORENTZIAN_ML",
+        level="WATCH",
+        close=100,
+        stop=94,
+        extra_metrics={
+            "ml_prediction": 2,
+            "ml_confidence": 0.25,
+            "kernel_slope_percent": 0.1,
+            "relative_strength_percentile": 0.55,
+            "structure_risk_percent": 6.0,
+            "latest_volume_lots": 2500,
+        },
+    )
+    strong = _signal(
+        "4002",
+        "LORENTZIAN_ML",
+        level="CONFIRMED",
+        close=100,
+        stop=95,
+        extra_metrics={
+            "ml_prediction": 6,
+            "ml_confidence": 0.75,
+            "kernel_slope_percent": 1.1,
+            "relative_strength_percentile": 0.82,
+            "structure_risk_percent": 5.0,
+            "latest_volume_lots": 3600,
+        },
+    )
+    result = build_recommendations([mild, strong])
+    items = result["lorentzian_ml"]
+    assert [item["symbol"] for item in items] == ["4002", "4001"]
+    assert "ML投票 +6/8" in items[0]["ranking_reasons"]
+    assert items[0]["structure_risk_percent"] == 5.0
+
+
 def test_unknown_fields_do_not_change_snapshot_ranking() -> None:
     signal = _signal("1001", "CONSOLIDATION_BREAKOUT")
     baseline = build_recommendations([signal])["consolidation_breakout"][0]
