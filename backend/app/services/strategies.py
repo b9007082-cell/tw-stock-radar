@@ -17,10 +17,19 @@ REVERSAL_SHARP_DROP_DAYS = 5
 REVERSAL_SHARP_DROP_PERCENT = 8.0
 REVERSAL_MIN_CONSECUTIVE_DOWN_DAYS = 3
 REVERSAL_VOLUME_MULTIPLE = 2.0
-LORENTZIAN_NEIGHBORS = 6
-LORENTZIAN_LOOKBACK_BARS = 160
+LORENTZIAN_SOURCE = "hlc3"
+LORENTZIAN_NEIGHBORS = 8
+LORENTZIAN_LOOKBACK_BARS = 2000
+LORENTZIAN_FEATURE_COUNT = 5
 LORENTZIAN_MIN_BARS = 80
 LORENTZIAN_MAX_RISK_PERCENT = 10.0
+LORENTZIAN_REGIME_THRESHOLD = -0.1
+LORENTZIAN_ADX_THRESHOLD = 20
+LORENTZIAN_KERNEL_LOOKBACK = 8
+LORENTZIAN_KERNEL_RELATIVE_WEIGHTING = 8.0
+LORENTZIAN_KERNEL_START = 25
+LORENTZIAN_MIN_ATR_PERCENT = 0.2
+LORENTZIAN_MAX_ATR_PERCENT = 12.0
 
 
 @dataclass(frozen=True)
@@ -851,6 +860,36 @@ def _bounded(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
 
 
+def _hlc3(bar: Bar) -> float:
+    return (bar.high + bar.low + bar.close) / 3
+
+
+def _source_values(bars: Sequence[Bar], source: str = LORENTZIAN_SOURCE) -> list[float]:
+    if source == "hlc3":
+        return [_hlc3(bar) for bar in bars]
+    return [bar.close for bar in bars]
+
+
+def _atr_percent(bars: Sequence[Bar], period: int = 14) -> float | None:
+    if len(bars) < period + 1:
+        return None
+    true_ranges: list[float] = []
+    for index in range(1, len(bars)):
+        bar = bars[index]
+        previous_close = bars[index - 1].close
+        true_ranges.append(
+            max(
+                bar.high - bar.low,
+                abs(bar.high - previous_close),
+                abs(bar.low - previous_close),
+            )
+        )
+    recent = true_ranges[-period:]
+    if len(recent) < period or bars[-1].close <= 0:
+        return None
+    return (sum(recent) / period / bars[-1].close) * 100
+
+
 def _lorentzian_features(
     bars: Sequence[Bar],
 ) -> list[tuple[float, float, float, float, float] | None]:
@@ -881,11 +920,11 @@ def _lorentzian_features(
 def _lorentzian_prediction_at(
     bars: Sequence[Bar],
     features: Sequence[tuple[float, float, float, float, float] | None],
+    source_values: Sequence[float],
     index: int,
 ) -> tuple[int, int, float] | None:
     if index < 4 or index >= len(bars) or features[index] is None:
         return None
-    closes = [bar.close for bar in bars]
     training_end = index - 4
     start = max(0, training_end - LORENTZIAN_LOOKBACK_BARS)
     current = features[index]
@@ -898,9 +937,9 @@ def _lorentzian_prediction_at(
             continue
         label = (
             1
-            if closes[candidate_index + 4] > closes[candidate_index]
+            if source_values[candidate_index + 4] > source_values[candidate_index]
             else -1
-            if closes[candidate_index + 4] < closes[candidate_index]
+            if source_values[candidate_index + 4] < source_values[candidate_index]
             else 0
         )
         distance = sum(
@@ -956,9 +995,14 @@ def lorentzian_ml_signal(
         return None
 
     closes = [bar.close for bar in bars]
+    source_values = _source_values(bars)
     features = _lorentzian_features(bars)
-    current = _lorentzian_prediction_at(bars, features, len(bars) - 1)
-    previous_prediction = _lorentzian_prediction_at(bars, features, len(bars) - 2)
+    current = _lorentzian_prediction_at(
+        bars, features, source_values, len(bars) - 1
+    )
+    previous_prediction = _lorentzian_prediction_at(
+        bars, features, source_values, len(bars) - 2
+    )
     if current is None:
         return None
     prediction, neighbors, confidence = current
@@ -966,8 +1010,18 @@ def lorentzian_ml_signal(
     if prediction <= 0:
         return None
 
-    kernel_now = _rational_quadratic_estimate(closes, len(bars) - 1)
-    kernel_previous = _rational_quadratic_estimate(closes, len(bars) - 2)
+    kernel_now = _rational_quadratic_estimate(
+        source_values,
+        len(bars) - 1,
+        lookback=LORENTZIAN_KERNEL_LOOKBACK,
+        relative_weighting=LORENTZIAN_KERNEL_RELATIVE_WEIGHTING,
+    )
+    kernel_previous = _rational_quadratic_estimate(
+        source_values,
+        len(bars) - 2,
+        lookback=LORENTZIAN_KERNEL_LOOKBACK,
+        relative_weighting=LORENTZIAN_KERNEL_RELATIVE_WEIGHTING,
+    )
     if kernel_now is None or kernel_previous is None or kernel_previous <= 0:
         return None
     kernel_slope_percent = percent_change(kernel_now, kernel_previous) * 100
@@ -976,8 +1030,27 @@ def lorentzian_ml_signal(
     ma50_value = float(sma(closes, 50)[-1] or 0)
     adx_value = (_adx_series(bars, 20)[-1] or 0.0)
     rsi_value = (_rsi_series(closes, 14)[-1] or 0.0)
+    atr_percent = _atr_percent(bars) or 0.0
+    volatility_filter_ok = (
+        LORENTZIAN_MIN_ATR_PERCENT
+        <= atr_percent
+        <= LORENTZIAN_MAX_ATR_PERCENT
+    )
+    regime_filter_ok = kernel_slope_percent >= LORENTZIAN_REGIME_THRESHOLD
+    adx_filter_enabled = False
+    adx_filter_ok = (
+        True
+        if not adx_filter_enabled
+        else adx_value >= LORENTZIAN_ADX_THRESHOLD
+    )
     relative_strength_ok = relative_strength_percentile >= 0.45
-    trend_filter_ok = kernel_bullish and latest.close > ma20_value
+    trend_filter_ok = (
+        volatility_filter_ok
+        and regime_filter_ok
+        and adx_filter_ok
+        and kernel_bullish
+        and latest.close > ma20_value
+    )
     if not trend_filter_ok or not relative_strength_ok:
         return None
 
@@ -1008,7 +1081,7 @@ def lorentzian_ml_signal(
         level = SignalLevel.CONFIRMED
         timing_status = "READY"
         timing_note = (
-            "Lorentzian近鄰投票轉多，Kernel估計線向上，且收盤突破前一日高點；"
+            "Lorentzian依TradingView預設參數投票轉多，Kernel估計線向上，且收盤突破前一日高點；"
             "此為機器學習輔助確認訊號，仍需搭配停損。"
         )
         trigger_price = previous.high
@@ -1017,7 +1090,7 @@ def lorentzian_ml_signal(
         level = SignalLevel.TRIAL
         timing_status = "TRIAL_ENTRY"
         timing_note = (
-            "Lorentzian近鄰投票剛轉多，Kernel方向向上，但尚未收盤突破前一日高點。"
+            "Lorentzian依TradingView預設參數投票剛轉多，Kernel方向向上，但尚未收盤突破前一日高點。"
         )
         trigger_price = previous.high
         score = int(min(88, 70 + confidence * 16))
@@ -1025,7 +1098,7 @@ def lorentzian_ml_signal(
         level = SignalLevel.WATCH
         timing_status = "WAIT_CONFIRMATION"
         timing_note = (
-            "Lorentzian近鄰投票偏多，等待突破前一日高點或更明確的量價確認。"
+            "Lorentzian依TradingView預設參數投票偏多，等待突破前一日高點或更明確的量價確認。"
         )
         trigger_price = previous.high
         score = int(min(82, 64 + confidence * 14))
@@ -1044,8 +1117,10 @@ def lorentzian_ml_signal(
         timing_status=timing_status,
         timing_note=timing_note,
         reasons=[
+            "TradingView預設：hlc3 / 8近鄰 / 5特徵 / Kernel 8",
             f"Lorentzian近鄰投票 {prediction:+d}/{neighbors}",
             f"信心 {confidence * 100:.0f}%，Kernel斜率 {kernel_slope_percent:.2f}%",
+            f"Volatility/Regime濾網通過，ATR {atr_percent:.2f}%",
             f"成交張數 {latest.volume / 1000:.0f} 張，大於{MIN_TRADE_VOLUME_LOTS:.0f}張",
             f"相對強度分位 {relative_strength_percentile * 100:.0f}%",
             (
@@ -1057,6 +1132,14 @@ def lorentzian_ml_signal(
         extra_metrics={
             "latest_volume_lots": latest.volume / 1000,
             "minimum_volume_lots": MIN_TRADE_VOLUME_LOTS,
+            "tv_source_hlc3": True,
+            "tv_neighbors_default": float(LORENTZIAN_NEIGHBORS),
+            "tv_max_bars_back_default": float(LORENTZIAN_LOOKBACK_BARS),
+            "tv_feature_count_default": float(LORENTZIAN_FEATURE_COUNT),
+            "tv_kernel_lookback_default": float(LORENTZIAN_KERNEL_LOOKBACK),
+            "available_training_bars": float(
+                min(len(bars), LORENTZIAN_LOOKBACK_BARS)
+            ),
             "ml_prediction": float(prediction),
             "ml_prior_prediction": float(prior_prediction),
             "ml_neighbors": float(neighbors),
@@ -1064,6 +1147,15 @@ def lorentzian_ml_signal(
             "kernel_estimate": kernel_now,
             "kernel_slope_percent": kernel_slope_percent,
             "kernel_bullish": kernel_bullish,
+            "volatility_filter_enabled": True,
+            "atr14_percent": atr_percent,
+            "volatility_filter_ok": volatility_filter_ok,
+            "regime_filter_enabled": True,
+            "regime_threshold": LORENTZIAN_REGIME_THRESHOLD,
+            "regime_filter_ok": regime_filter_ok,
+            "adx_filter_enabled": adx_filter_enabled,
+            "adx_threshold": float(LORENTZIAN_ADX_THRESHOLD),
+            "adx_filter_ok": adx_filter_ok,
             "broke_previous_high": broke_previous_high,
             "relative_strength_percentile": relative_strength_percentile,
             "rsi14": float(rsi_value),

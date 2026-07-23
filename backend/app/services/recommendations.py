@@ -5,7 +5,7 @@ from typing import Any
 
 
 RECOMMENDATION_LIMIT = 10
-RECOMMENDATION_VERSION = "2026.07.r5"
+RECOMMENDATION_VERSION = "2026.07.r6"
 MAX_STRUCTURE_RISK_PERCENT = 8.0
 MIN_PULLBACK_REWARD_RISK = 1.5
 MAX_LORENTZIAN_RISK_PERCENT = 10.0
@@ -173,7 +173,7 @@ def _lorentzian_score(
     metrics: Mapping[str, Any],
 ) -> tuple[float, float, list[str]] | None:
     prediction = _number(metrics.get("ml_prediction"))
-    neighbors = _number(metrics.get("ml_neighbors")) or 6.0
+    neighbors = _number(metrics.get("ml_neighbors")) or 8.0
     confidence = _number(metrics.get("ml_confidence"))
     kernel_slope = _number(metrics.get("kernel_slope_percent")) or 0.0
     rs_percentile = _number(metrics.get("relative_strength_percentile")) or 0.0
