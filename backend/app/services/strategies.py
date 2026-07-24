@@ -17,7 +17,7 @@ REVERSAL_SHARP_DROP_DAYS = 5
 REVERSAL_SHARP_DROP_PERCENT = 8.0
 REVERSAL_MIN_CONSECUTIVE_DOWN_DAYS = 3
 REVERSAL_VOLUME_MULTIPLE = 2.0
-LORENTZIAN_SOURCE = "hlc3"
+LORENTZIAN_SOURCE = "close"
 LORENTZIAN_NEIGHBORS = 8
 LORENTZIAN_LOOKBACK_BARS = 2000
 LORENTZIAN_FEATURE_COUNT = 5
@@ -28,8 +28,6 @@ LORENTZIAN_ADX_THRESHOLD = 20
 LORENTZIAN_KERNEL_LOOKBACK = 8
 LORENTZIAN_KERNEL_RELATIVE_WEIGHTING = 8.0
 LORENTZIAN_KERNEL_START = 25
-LORENTZIAN_MIN_ATR_PERCENT = 0.2
-LORENTZIAN_MAX_ATR_PERCENT = 12.0
 
 
 @dataclass(frozen=True)
@@ -847,17 +845,145 @@ def _wavetrend_series(
         0.0 if deviation == 0 else (price - avg) / (0.015 * deviation)
         for price, avg, deviation in zip(hlc3, esa, de, strict=True)
     ]
-    wt = _ema(ci, average_length)
+    wt1 = _ema(ci, average_length)
+    wt2 = sma(wt1, 4)
     result: list[float | None] = [None] * len(bars)
     warmup = channel_length + average_length
-    for index, value in enumerate(wt):
-        if index >= warmup:
-            result[index] = value
+    for index, (fast, slow) in enumerate(zip(wt1, wt2, strict=True)):
+        if index >= warmup and slow is not None:
+            result[index] = fast - slow
     return result
 
 
 def _bounded(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
+
+
+def _normalize_running(
+    values: Sequence[float | None],
+    out_min: float = 0.0,
+    out_max: float = 1.0,
+) -> list[float | None]:
+    result: list[float | None] = [None] * len(values)
+    historic_min = 1e11
+    historic_max = -1e11
+    for index, value in enumerate(values):
+        if value is None:
+            continue
+        historic_min = min(historic_min, value)
+        historic_max = max(historic_max, value)
+        result[index] = out_min + (out_max - out_min) * (
+            value - historic_min
+        ) / max(historic_max - historic_min, 1e-9)
+    return result
+
+
+def _cci_from_values(values: Sequence[float], period: int) -> list[float | None]:
+    result: list[float | None] = [None] * len(values)
+    for index in range(period - 1, len(values)):
+        window = values[index - period + 1 : index + 1]
+        mean = _average(window)
+        mean_deviation = _average([abs(value - mean) for value in window])
+        if mean_deviation > 0:
+            result[index] = (values[index] - mean) / (0.015 * mean_deviation)
+    return result
+
+
+def _ema_optional(values: Sequence[float | None], period: int) -> list[float | None]:
+    result: list[float | None] = [None] * len(values)
+    if period <= 0:
+        return result
+    alpha = 2.0 / (period + 1)
+    for index, value in enumerate(values):
+        if value is None:
+            continue
+        previous = result[index - 1] if index > 0 else None
+        if previous is not None:
+            result[index] = alpha * value + (1.0 - alpha) * previous
+            continue
+        if index >= period - 1:
+            window = values[index - period + 1 : index + 1]
+            if all(item is not None for item in window):
+                result[index] = _average([float(item) for item in window])
+    return result
+
+
+def _rma_optional(values: Sequence[float | None], period: int) -> list[float | None]:
+    result: list[float | None] = [None] * len(values)
+    if period <= 0:
+        return result
+    alpha = 1.0 / period
+    for index, value in enumerate(values):
+        if value is None:
+            continue
+        previous = result[index - 1] if index > 0 else None
+        if previous is not None:
+            result[index] = alpha * value + (1.0 - alpha) * previous
+            continue
+        if index >= period - 1:
+            window = values[index - period + 1 : index + 1]
+            if all(item is not None for item in window):
+                result[index] = _average([float(item) for item in window])
+    return result
+
+
+def _true_range_series(bars: Sequence[Bar]) -> list[float]:
+    result: list[float] = []
+    for index, bar in enumerate(bars):
+        previous_close = bars[index - 1].close if index > 0 else 0.0
+        result.append(
+            max(
+                bar.high - bar.low,
+                abs(bar.high - previous_close),
+                abs(bar.low - previous_close),
+            )
+        )
+    return result
+
+
+def _atr_series(bars: Sequence[Bar], period: int) -> list[float | None]:
+    return _rma_optional(_true_range_series(bars), period)
+
+
+def _regime_filter_series(
+    bars: Sequence[Bar],
+) -> tuple[list[float], list[float]]:
+    size = len(bars)
+    abs_slope = [0.0] * size
+    ema_abs = [0.0] * size
+    if not bars:
+        return abs_slope, ema_abs
+    ohlc4 = [
+        (bar.open + bar.high + bar.low + bar.close) / 4.0
+        for bar in bars
+    ]
+    value1 = [0.0] * size
+    value2 = [0.0] * size
+    klmf = [0.0] * size
+    value2[0] = bars[0].high - bars[0].low
+    klmf[0] = ohlc4[0]
+    alpha_ema = 2.0 / 201.0
+    for index in range(1, size):
+        value1[index] = (
+            0.2 * (ohlc4[index] - ohlc4[index - 1])
+            + 0.8 * value1[index - 1]
+        )
+        value2[index] = (
+            0.1 * (bars[index].high - bars[index].low)
+            + 0.8 * value2[index - 1]
+        )
+        omega = abs(value1[index] / value2[index]) if value2[index] else 0.0
+        alpha = (-(omega**2) + math.sqrt(omega**4 + 16.0 * omega**2)) / 8.0
+        klmf[index] = alpha * ohlc4[index] + (1.0 - alpha) * klmf[index - 1]
+        abs_slope[index] = abs(klmf[index] - klmf[index - 1])
+        previous_ema = ema_abs[index - 1]
+        if previous_ema == 0 and index < 200:
+            ema_abs[index] = abs_slope[index]
+        else:
+            ema_abs[index] = alpha_ema * abs_slope[index] + (
+                1.0 - alpha_ema
+            ) * previous_ema
+    return abs_slope, ema_abs
 
 
 def _hlc3(bar: Bar) -> float:
@@ -870,35 +996,15 @@ def _source_values(bars: Sequence[Bar], source: str = LORENTZIAN_SOURCE) -> list
     return [bar.close for bar in bars]
 
 
-def _atr_percent(bars: Sequence[Bar], period: int = 14) -> float | None:
-    if len(bars) < period + 1:
-        return None
-    true_ranges: list[float] = []
-    for index in range(1, len(bars)):
-        bar = bars[index]
-        previous_close = bars[index - 1].close
-        true_ranges.append(
-            max(
-                bar.high - bar.low,
-                abs(bar.high - previous_close),
-                abs(bar.low - previous_close),
-            )
-        )
-    recent = true_ranges[-period:]
-    if len(recent) < period or bars[-1].close <= 0:
-        return None
-    return (sum(recent) / period / bars[-1].close) * 100
-
-
 def _lorentzian_features(
     bars: Sequence[Bar],
 ) -> list[tuple[float, float, float, float, float] | None]:
     closes = [bar.close for bar in bars]
-    rsi14 = _rsi_series(closes, 14)
-    wt = _wavetrend_series(bars)
-    cci20 = _cci_series(bars, 20)
+    rsi14 = _ema_optional(_rsi_series(closes, 14), 1)
+    wt = _normalize_running(_wavetrend_series(bars))
+    cci20 = _normalize_running(_ema_optional(_cci_from_values(closes, 20), 1))
     adx20 = _adx_series(bars, 20)
-    rsi9 = _rsi_series(closes, 9)
+    rsi9 = _ema_optional(_rsi_series(closes, 9), 1)
     features: list[tuple[float, float, float, float, float] | None] = []
     for values in zip(rsi14, wt, cci20, adx20, rsi9, strict=True):
         rsi_value, wt_value, cci_value, adx_value, rsi_fast = values
@@ -907,52 +1013,73 @@ def _lorentzian_features(
             continue
         features.append(
             (
-                float(rsi_value),
-                _bounded(float(wt_value) + 50.0, 0.0, 100.0),
-                _bounded((float(cci_value) + 200.0) / 4.0, 0.0, 100.0),
-                _bounded(float(adx_value), 0.0, 100.0),
-                float(rsi_fast),
+                _bounded(float(rsi_value) / 100.0, 0.0, 1.0),
+                _bounded(float(wt_value), 0.0, 1.0),
+                _bounded(float(cci_value), 0.0, 1.0),
+                _bounded(float(adx_value) / 100.0, 0.0, 1.0),
+                _bounded(float(rsi_fast) / 100.0, 0.0, 1.0),
             )
         )
     return features
 
 
-def _lorentzian_prediction_at(
-    bars: Sequence[Bar],
+def _lorentzian_predictions(
     features: Sequence[tuple[float, float, float, float, float] | None],
     source_values: Sequence[float],
-    index: int,
-) -> tuple[int, int, float] | None:
-    if index < 4 or index >= len(bars) or features[index] is None:
-        return None
-    training_end = index - 4
-    start = max(0, training_end - LORENTZIAN_LOOKBACK_BARS)
-    current = features[index]
-    if current is None:
-        return None
-    candidates: list[tuple[float, int]] = []
-    for candidate_index in range(start, training_end + 1):
-        historical = features[candidate_index]
-        if historical is None or candidate_index % 4 == index % 4:
+) -> list[tuple[int, int, float] | None]:
+    """Forward-indexed ANN port matching the AI Edge parity-tested implementation."""
+
+    labels: list[int] = []
+    distances: list[float] = []
+    predictions: list[int] = []
+    results: list[tuple[int, int, float] | None] = []
+    last_bar_index = len(features) - 1
+    max_bars_back_index = (
+        last_bar_index - LORENTZIAN_LOOKBACK_BARS
+        if last_bar_index >= LORENTZIAN_LOOKBACK_BARS
+        else 0
+    )
+    for index, current in enumerate(features):
+        train_label = 0
+        if index >= 4:
+            train_label = (
+                -1
+                if source_values[index - 4] < source_values[index]
+                else 1
+                if source_values[index - 4] > source_values[index]
+                else 0
+            )
+        labels.append(train_label)
+        if current is None or index < max_bars_back_index:
+            results.append(None)
             continue
-        label = (
-            1
-            if source_values[candidate_index + 4] > source_values[candidate_index]
-            else -1
-            if source_values[candidate_index + 4] < source_values[candidate_index]
-            else 0
-        )
-        distance = sum(
-            math.log1p(abs(current_value - historical_value))
-            for current_value, historical_value in zip(current, historical, strict=True)
-        )
-        candidates.append((distance, label))
-    if len(candidates) < LORENTZIAN_NEIGHBORS:
-        return None
-    nearest = sorted(candidates, key=lambda item: item[0])[:LORENTZIAN_NEIGHBORS]
-    prediction = sum(label for _, label in nearest)
-    confidence = abs(prediction) / LORENTZIAN_NEIGHBORS
-    return prediction, len(nearest), confidence
+
+        size_loop = min(LORENTZIAN_LOOKBACK_BARS - 1, len(labels) - 1)
+        start_index = max_bars_back_index
+        last_distance = -1.0
+        for candidate_index in range(start_index, size_loop + 1):
+            historical = features[candidate_index]
+            if historical is None or candidate_index % 4 == 0:
+                continue
+            distance = sum(
+                math.log1p(abs(current_value - historical_value))
+                for current_value, historical_value in zip(
+                    current, historical, strict=True
+                )
+            )
+            if distance >= last_distance:
+                last_distance = distance
+                distances.append(distance)
+                predictions.append(round(labels[candidate_index]))
+                if len(predictions) > LORENTZIAN_NEIGHBORS:
+                    threshold_index = round(LORENTZIAN_NEIGHBORS * 3.0 / 4.0)
+                    last_distance = distances[threshold_index]
+                    distances.pop(0)
+                    predictions.pop(0)
+        prediction = int(sum(predictions))
+        confidence = abs(prediction) / LORENTZIAN_NEIGHBORS
+        results.append((prediction, len(predictions), confidence))
+    return results
 
 
 def _rational_quadratic_estimate(
@@ -960,19 +1087,19 @@ def _rational_quadratic_estimate(
     index: int,
     lookback: int = 8,
     relative_weighting: float = 8.0,
+    start_at_bar: int = LORENTZIAN_KERNEL_START,
 ) -> float | None:
     if index < 0 or index >= len(values):
         return None
-    start = max(0, index - lookback + 1)
     weighted_sum = 0.0
     weight_total = 0.0
-    for sample_index in range(start, index + 1):
-        distance = index - sample_index
+    denominator = max(float(lookback**2) * 2.0 * relative_weighting, 1e-10)
+    for distance in range(min(1 + start_at_bar, index) + 1):
         weight = (
-            1
-            + (distance * distance)
-            / (2 * relative_weighting * lookback * lookback)
+            1.0
+            + ((distance * distance) / denominator)
         ) ** (-relative_weighting)
+        sample_index = index - distance
         weighted_sum += values[sample_index] * weight
         weight_total += weight
     return weighted_sum / weight_total if weight_total else None
@@ -997,12 +1124,9 @@ def lorentzian_ml_signal(
     closes = [bar.close for bar in bars]
     source_values = _source_values(bars)
     features = _lorentzian_features(bars)
-    current = _lorentzian_prediction_at(
-        bars, features, source_values, len(bars) - 1
-    )
-    previous_prediction = _lorentzian_prediction_at(
-        bars, features, source_values, len(bars) - 2
-    )
+    predictions = _lorentzian_predictions(features, source_values)
+    current = predictions[-1]
+    previous_prediction = predictions[-2] if len(predictions) >= 2 else None
     if current is None:
         return None
     prediction, neighbors, confidence = current
@@ -1030,13 +1154,20 @@ def lorentzian_ml_signal(
     ma50_value = float(sma(closes, 50)[-1] or 0)
     adx_value = (_adx_series(bars, 20)[-1] or 0.0)
     rsi_value = (_rsi_series(closes, 14)[-1] or 0.0)
-    atr_percent = _atr_percent(bars) or 0.0
+    atr1 = _atr_series(bars, 1)[-1]
+    atr10 = _atr_series(bars, 10)[-1]
+    atr_percent = ((atr1 or 0.0) / latest.close) * 100 if latest.close > 0 else 0.0
     volatility_filter_ok = (
-        LORENTZIAN_MIN_ATR_PERCENT
-        <= atr_percent
-        <= LORENTZIAN_MAX_ATR_PERCENT
+        True if atr1 is None or atr10 is None else atr1 > atr10
     )
-    regime_filter_ok = kernel_slope_percent >= LORENTZIAN_REGIME_THRESHOLD
+    regime_abs_slope, regime_ema_abs_slope = _regime_filter_series(bars)
+    regime_denominator = regime_ema_abs_slope[-1]
+    regime_score = (
+        (regime_abs_slope[-1] - regime_denominator) / regime_denominator
+        if regime_denominator
+        else 0.0
+    )
+    regime_filter_ok = regime_score >= LORENTZIAN_REGIME_THRESHOLD
     adx_filter_enabled = False
     adx_filter_ok = (
         True
@@ -1117,10 +1248,10 @@ def lorentzian_ml_signal(
         timing_status=timing_status,
         timing_note=timing_note,
         reasons=[
-            "TradingView預設：hlc3 / 8近鄰 / 5特徵 / Kernel 8",
+            "AI Edge預設：close / 8近鄰 / 5特徵 / Kernel 8",
             f"Lorentzian近鄰投票 {prediction:+d}/{neighbors}",
             f"信心 {confidence * 100:.0f}%，Kernel斜率 {kernel_slope_percent:.2f}%",
-            f"Volatility/Regime濾網通過，ATR {atr_percent:.2f}%",
+            f"Volatility/Regime濾網通過，ATR1 {atr_percent:.2f}%",
             f"成交張數 {latest.volume / 1000:.0f} 張，大於{MIN_TRADE_VOLUME_LOTS:.0f}張",
             f"相對強度分位 {relative_strength_percentile * 100:.0f}%",
             (
@@ -1132,7 +1263,7 @@ def lorentzian_ml_signal(
         extra_metrics={
             "latest_volume_lots": latest.volume / 1000,
             "minimum_volume_lots": MIN_TRADE_VOLUME_LOTS,
-            "tv_source_hlc3": True,
+            "tv_source_close": True,
             "tv_neighbors_default": float(LORENTZIAN_NEIGHBORS),
             "tv_max_bars_back_default": float(LORENTZIAN_LOOKBACK_BARS),
             "tv_feature_count_default": float(LORENTZIAN_FEATURE_COUNT),
@@ -1148,9 +1279,12 @@ def lorentzian_ml_signal(
             "kernel_slope_percent": kernel_slope_percent,
             "kernel_bullish": kernel_bullish,
             "volatility_filter_enabled": True,
-            "atr14_percent": atr_percent,
+            "atr1_percent": atr_percent,
+            "atr1": float(atr1 or 0.0),
+            "atr10": float(atr10 or 0.0),
             "volatility_filter_ok": volatility_filter_ok,
             "regime_filter_enabled": True,
+            "regime_score": regime_score,
             "regime_threshold": LORENTZIAN_REGIME_THRESHOLD,
             "regime_filter_ok": regime_filter_ok,
             "adx_filter_enabled": adx_filter_enabled,

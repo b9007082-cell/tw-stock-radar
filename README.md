@@ -6,11 +6,11 @@
 - `回後買上漲`：多頭趨勢中，回檔不跌破前低、守住 20 日線且回檔均量低於前段上漲均量；確認時需紅 K 收復 5 日線、突破前一日高點、轉強量大於回檔均量，且當日成交量大於 2000 張。
 - `盤整突破`：多頭趨勢中，最近 20 日整理均量低於前 20 日均量；確認時需紅 K 收盤突破最近確認波峰／上頸線與前一日高點，且突破量大於整理均量 1.2 倍、當日成交量大於 2000 張。
 - `搶反彈`：近 20 日高點回落超過 15%，且具連續下跌或 5 日急跌特徵；低檔出現成交量大於前一日 2 倍以上的止跌 K（長下影、十字線或實體紅 K），等隔日上漲收盤突破前一日止跌 K 最高點才列確認買點，跌破前一日 K 低點出場。
-- `Lorentzian ML`：依 TradingView 頁面列出的 jdehorty MPL-2.0 開源 Lorentzian Classification 官方預設概念轉譯為每日選股版；Source 使用 `hlc3`、Neighbors `8`、Max Bars Back `2000`、Feature Count `5`，使用 RSI、WaveTrend、CCI、ADX 與 RSI 快線做 Lorentzian distance 近鄰投票，再搭配 Volatility / Regime 濾網、Kernel Lookback `8`、相對強度與 2000 張流動性門檻。ADX 濾網依官方預設保持關閉，只顯示 ADX 數值供判讀。此項為研究輔助訊號，不是朱家泓老師五字訣原始條件。
+- `Lorentzian ML`：依 AI Edge 官方 port repo 的 Lorentzian Classification 實作概念轉譯為每日選股版；Source 使用 `close`、Neighbors `8`、Max Bars Back `2000`、Feature Count `5`，使用 RSI、WaveTrend、CCI、ADX 與 RSI 快線做 0～1 正規化後的 Lorentzian distance ANN 投票，再搭配 Volatility / Regime 濾網、Kernel Lookback `8`、相對強度與 2000 張流動性門檻。ADX 濾網依預設保持關閉，只顯示 ADX 數值供判讀。此項為研究輔助訊號，不是朱家泓老師五字訣原始條件。
 - `指標輔助`：KD 低檔黃金交叉向上、MACD 維持 0 軸之上會列入提示與排序理由；因指標常落後價格，暫作輔助檢查，不作為硬刪除門檻。
 - `WATCH`（方向或條件觀察）、`TRIAL`（正在轉強但尚未確認）、`CONFIRMED`（買點確認）三級訊號。
 - 只有 `CONFIRMED` 才會顯示可執行進場區；結構停損設在最近確認波谷。
-- 每日另產生「回後買上漲 Top 10」、「盤整突破 Top 10」、「搶反彈 Top 10」及「Lorentzian ML Top 10」；確認固定優先，搶反彈以跌幅、低檔爆量、止跌 K 風險與是否突破止跌 K 高點排序，Lorentzian ML 以 TradingView 預設近鄰投票、信心、Kernel 斜率、相對強度與結構風險排序。
+- 每日另產生「回後買上漲 Top 10」、「盤整突破 Top 10」、「搶反彈 Top 10」及「Lorentzian ML Top 10」；確認固定優先，搶反彈以跌幅、低檔爆量、止跌 K 風險與是否突破止跌 K 高點排序，Lorentzian ML 以 AI Edge port 對齊後的近鄰投票、信心、Kernel 斜率、相對強度與結構風險排序。
 - Top 10 排除結構風險超過 8%的股票；回後買上漲另要求到前高至少保有 1.5R 空間，且兩套榜單都套用量縮與 2000 張流動性硬條件。
 
 > 多頭方向成立、跌破後站回 5 日線，或盤中突破，都不單獨視為買點；必須等各策略的收盤確認條件完整成立。

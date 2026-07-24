@@ -114,13 +114,13 @@ def _bottom_reversal_confirmed_bars() -> list[Bar]:
 def _lorentzian_bars(volume: int = 3_000_000) -> list[Bar]:
     bars: list[Bar] = []
     for index in range(120):
-        close = 50 + index * 0.25 + math.sin(index / 4) * 1.2
+        close = 80 + (index // 5 % 2) * 2 + math.sin(index / 3) * 1.5 + index * 0.08
         bars.append(
             Bar(
                 date=date(2026, 1, 1) + timedelta(days=index),
                 open=close - 0.2,
-                high=close + 0.4,
-                low=close - 0.4,
+                high=close + 0.8,
+                low=close - 0.8,
                 close=close,
                 volume=volume,
                 turnover=100_000_000,
@@ -130,9 +130,9 @@ def _lorentzian_bars(volume: int = 3_000_000) -> list[Bar]:
     bars[-1] = Bar(
         date=latest.date,
         open=latest.close - 0.4,
-        high=latest.close + 1.0,
-        low=latest.close - 0.5,
-        close=bars[-2].high + 0.5,
+        high=max(latest.high, bars[-2].high + 1.0),
+        low=latest.close - 1.2,
+        close=bars[-2].high + 0.6,
         volume=volume,
         turnover=100_000_000,
     )
