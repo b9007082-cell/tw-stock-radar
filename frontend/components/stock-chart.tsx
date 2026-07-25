@@ -20,6 +20,14 @@ type GannLevel = {
   lineWidth: 1 | 2;
 };
 
+type GannAngleLine = {
+  key: string;
+  label: string;
+  color: string;
+  lineWidth: 1 | 2;
+  data: { time: Time; value: number }[];
+};
+
 type GannLineGroup = {
   startIndex: number;
   endIndex: number;
@@ -27,7 +35,16 @@ type GannLineGroup = {
   low?: number;
   position?: number;
   anchor?: number;
+  anchorLabel?: string;
+  priceBarRatio?: number;
   levels: GannLevel[];
+  angleLines?: GannAngleLine[];
+};
+
+type GannSquareGroup = GannLineGroup & {
+  anchorLabel: string;
+  priceBarRatio: number;
+  angleLines: GannAngleLine[];
 };
 
 function movingAverage(bars: Bar[], period: number) {
@@ -109,6 +126,17 @@ function buildGannBox(bars: Bar[], signal?: Signal | null): GannLineGroup | null
   const startIndex = Math.min(Math.floor(anchorIndex), bars.length - 1);
   const latestClose = bars[bars.length - 1].close;
   const position = ((latestClose - low) / range) * 100;
+  const endIndex = bars.length - 1;
+  const windowLength = Math.max(8, endIndex - startIndex);
+  const priceBarRatio = range / windowLength;
+  const anchorIsLow = latestClose >= low;
+  const anchor = anchorIsLow ? low : high;
+  const directionalRatio = anchorIsLow ? priceBarRatio : -priceBarRatio;
+  const makeAngleData = (slope: number) =>
+    bars.slice(startIndex, endIndex + 1).map((bar, offset) => ({
+      time: bar.trade_date as Time,
+      value: anchor + slope * offset,
+    }));
   const levels: GannLevel[] = [
     {
       key: "gann-100",
@@ -146,52 +174,176 @@ function buildGannBox(bars: Bar[], signal?: Signal | null): GannLineGroup | null
       lineWidth: 2,
     },
   ];
+  const rawAngleLines: GannAngleLine[] = [
+    {
+      key: "box-1x1",
+      label: "箱體 1x1 主線",
+      color: "#fb7185",
+      lineWidth: 2,
+      data: makeAngleData(directionalRatio),
+    },
+    {
+      key: "box-2x1",
+      label: "箱體 2x1 快線",
+      color: "#f97316",
+      lineWidth: 1,
+      data: makeAngleData(directionalRatio * 2),
+    },
+    {
+      key: "box-1x2",
+      label: "箱體 1x2 慢線",
+      color: "#38bdf8",
+      lineWidth: 1,
+      data: makeAngleData(directionalRatio * 0.5),
+    },
+  ];
+  const angleLines: GannAngleLine[] = rawAngleLines.map((line) => ({
+    ...line,
+    data: line.data.filter((point) => point.value > 0),
+  }));
 
   return {
     startIndex,
-    endIndex: bars.length - 1,
+    endIndex,
     high,
     low,
     position,
+    anchor,
+    anchorLabel: anchorIsLow ? "低點起算" : "高點起算",
+    priceBarRatio,
     levels,
+    angleLines,
   };
 }
 
-function buildGannSquare(bars: Bar[], signal?: Signal | null): GannLineGroup | null {
-  if (bars.length < 2) return null;
-  const latestClose = bars[bars.length - 1].close;
-  if (latestClose <= 0) return null;
-  const trough = metricNumber(signal, "latest_trough");
-  const peak = metricNumber(signal, "latest_peak");
-  const anchor =
-    trough != null && trough > 0 && latestClose >= trough
-      ? trough
-      : peak != null && peak > 0
-        ? peak
-        : latestClose;
-  const root = Math.sqrt(anchor);
-  const rawLevels = [
-    { key: "square-minus-180", label: "正方形支撐 180°", step: -0.5, color: "#22d3ee" },
-    { key: "square-minus-90", label: "正方形支撐 90°", step: -0.25, color: "#67e8f9" },
-    { key: "square-anchor", label: "正方形基準", step: 0, color: "#f472b6" },
-    { key: "square-plus-90", label: "正方形壓力 90°", step: 0.25, color: "#f0abfc" },
-    { key: "square-plus-180", label: "正方形壓力 180°", step: 0.5, color: "#e879f9" },
+function buildGannSquare(bars: Bar[], signal?: Signal | null): GannSquareGroup | null {
+  if (bars.length < 12) return null;
+  const metricPeak = metricNumber(signal, "latest_peak");
+  const metricTrough = metricNumber(signal, "latest_trough");
+  const metricPeakIndex = metricNumber(signal, "latest_peak_index");
+  const metricTroughIndex = metricNumber(signal, "latest_trough_index");
+  const fallbackStart = Math.max(0, bars.length - 60);
+  const fallbackBars = bars.slice(fallbackStart);
+  const fallbackHigh = Math.max(...fallbackBars.map((bar) => bar.high));
+  const fallbackLow = Math.min(...fallbackBars.map((bar) => bar.low));
+
+  const high =
+    metricPeak != null && metricTrough != null && metricPeak > metricTrough
+      ? metricPeak
+      : fallbackHigh;
+  const low =
+    metricPeak != null && metricTrough != null && metricPeak > metricTrough
+      ? metricTrough
+      : fallbackLow;
+  const range = high - low;
+  if (range <= 0) return null;
+
+  const hasMetricAnchors =
+    metricPeakIndex != null &&
+    metricTroughIndex != null &&
+    metricPeak != null &&
+    metricTrough != null &&
+    metricPeak > metricTrough;
+  const anchorIndex = hasMetricAnchors
+    ? Math.max(0, Math.min(Math.floor(metricPeakIndex), Math.floor(metricTroughIndex)))
+    : fallbackStart;
+  const endIndex = bars.length - 1;
+  const startIndex = Math.min(anchorIndex, Math.max(0, endIndex - 8));
+  const windowLength = Math.max(8, endIndex - startIndex);
+  const priceBarRatio = range / windowLength;
+  const latestClose = bars[endIndex].close;
+  const anchorIsLow = latestClose >= low;
+  const anchor = anchorIsLow ? low : high;
+  const anchorLabel = anchorIsLow ? "低點起算" : "高點起算";
+
+  const makeAngleData = (slope: number) =>
+    bars.slice(startIndex, endIndex + 1).map((bar, offset) => ({
+      time: bar.trade_date as Time,
+      value: anchor + slope * offset,
+    }));
+  const levels: GannLevel[] = [
+    {
+      key: "square-top",
+      label: "正方上緣",
+      value: high,
+      color: "#f0abfc",
+      lineWidth: 2,
+    },
+    {
+      key: "square-75",
+      label: "75%",
+      value: low + range * 0.75,
+      color: "#e879f9",
+      lineWidth: 1,
+    },
+    {
+      key: "square-mid",
+      label: "50%",
+      value: low + range * 0.5,
+      color: "#fbbf24",
+      lineWidth: 2,
+    },
+    {
+      key: "square-25",
+      label: "25%",
+      value: low + range * 0.25,
+      color: "#67e8f9",
+      lineWidth: 1,
+    },
+    {
+      key: "square-bottom",
+      label: "正方下緣",
+      value: low,
+      color: "#22d3ee",
+      lineWidth: 2,
+    },
   ];
-  const levels: GannLevel[] = rawLevels
-    .map((level) => ({
-      key: level.key,
-      label: level.label,
-      value: Math.max(0, (root + level.step) ** 2),
-      color: level.color,
-      lineWidth: level.step === 0 ? (2 as const) : (1 as const),
-    }))
-    .filter((level) => level.value > 0)
-    .sort((left, right) => right.value - left.value);
+  const directionalRatio = anchorIsLow ? priceBarRatio : -priceBarRatio;
+  const rawAngleLines: GannAngleLine[] = [
+    {
+      key: "square-1x1",
+      label: "1x1 主角度線",
+      color: "#fb7185",
+      lineWidth: 2,
+      data: makeAngleData(directionalRatio),
+    },
+    {
+      key: "square-2x1",
+      label: "2x1 快線",
+      color: "#f97316",
+      lineWidth: 1,
+      data: makeAngleData(directionalRatio * 2),
+    },
+    {
+      key: "square-1x2",
+      label: "1x2 慢線",
+      color: "#38bdf8",
+      lineWidth: 1,
+      data: makeAngleData(directionalRatio * 0.5),
+    },
+    {
+      key: "square-reverse-1x1",
+      label: "反向 1x1",
+      color: "#a78bfa",
+      lineWidth: 1,
+      data: makeAngleData(-directionalRatio),
+    },
+  ];
+  const angleLines: GannAngleLine[] = rawAngleLines.map((line) => ({
+    ...line,
+    data: line.data.filter((point) => point.value > 0),
+  }));
+
   return {
-    startIndex: Math.max(0, bars.length - 60),
-    endIndex: bars.length - 1,
+    startIndex,
+    endIndex,
+    high,
+    low,
     anchor,
+    anchorLabel,
+    priceBarRatio,
     levels,
+    angleLines,
   };
 }
 
@@ -295,6 +447,17 @@ export function StockChart({ bars, signal }: { bars: Bar[]; signal?: Signal | nu
           title: `${titlePrefix}${level.label}`,
         });
       });
+      group.angleLines?.forEach((angleLine) => {
+        if (angleLine.data.length < 2) return;
+        const line = chart.addSeries(LineSeries, {
+          color: angleLine.color,
+          lineWidth: angleLine.lineWidth,
+          lineStyle: 1,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        line.setData(angleLine.data);
+      });
     };
     if (activeGannBox) drawGannLines(activeGannBox, "江恩箱");
     if (activeGannSquare) drawGannLines(activeGannSquare, "江恩");
@@ -326,7 +489,7 @@ export function StockChart({ bars, signal }: { bars: Bar[]; signal?: Signal | nu
               </div>
             </div>
             <div className="text-[11px] text-slate-500">
-              50% 守住偏強，75% 以上接近突破觀察區
+              {gannBox.anchorLabel}｜含1x1 / 2x1 / 1x2角度線
             </div>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -355,12 +518,12 @@ export function StockChart({ bars, signal }: { bars: Bar[]; signal?: Signal | nu
                 江恩正方形參考線
               </div>
               <div className="mt-1 text-[11px] text-slate-400">
-                基準價 {formatPrice(gannSquare.anchor ?? bars[bars.length - 1].close)}
-                ｜Square of Nine 90° / 180° 支撐壓力
+                {gannSquare.anchorLabel}｜價格/K棒比{" "}
+                {formatPrice(gannSquare.priceBarRatio)}｜參考主要高低點框線
               </div>
             </div>
             <div className="text-[11px] text-slate-500">
-              站上上方角度線偏強，跌破下方角度線轉弱
+              站上1x1偏強，跌破1x1轉弱；快慢線看延伸力道
             </div>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
