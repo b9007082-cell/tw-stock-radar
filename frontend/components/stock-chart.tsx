@@ -20,6 +20,16 @@ type GannLevel = {
   lineWidth: 1 | 2;
 };
 
+type GannLineGroup = {
+  startIndex: number;
+  endIndex: number;
+  high?: number;
+  low?: number;
+  position?: number;
+  anchor?: number;
+  levels: GannLevel[];
+};
+
 function movingAverage(bars: Bar[], period: number) {
   return bars.flatMap((bar, index) => {
     if (index < period - 1) return [];
@@ -70,7 +80,7 @@ function formatPrice(value: number) {
   return value.toFixed(2);
 }
 
-function buildGannBox(bars: Bar[], signal?: Signal | null) {
+function buildGannBox(bars: Bar[], signal?: Signal | null): GannLineGroup | null {
   if (bars.length < 2) return null;
   const metricPeak = metricNumber(signal, "latest_peak");
   const metricTrough = metricNumber(signal, "latest_trough");
@@ -147,13 +157,53 @@ function buildGannBox(bars: Bar[], signal?: Signal | null) {
   };
 }
 
+function buildGannSquare(bars: Bar[], signal?: Signal | null): GannLineGroup | null {
+  if (bars.length < 2) return null;
+  const latestClose = bars[bars.length - 1].close;
+  if (latestClose <= 0) return null;
+  const trough = metricNumber(signal, "latest_trough");
+  const peak = metricNumber(signal, "latest_peak");
+  const anchor =
+    trough != null && trough > 0 && latestClose >= trough
+      ? trough
+      : peak != null && peak > 0
+        ? peak
+        : latestClose;
+  const root = Math.sqrt(anchor);
+  const rawLevels = [
+    { key: "square-minus-180", label: "正方形支撐 180°", step: -0.5, color: "#22d3ee" },
+    { key: "square-minus-90", label: "正方形支撐 90°", step: -0.25, color: "#67e8f9" },
+    { key: "square-anchor", label: "正方形基準", step: 0, color: "#f472b6" },
+    { key: "square-plus-90", label: "正方形壓力 90°", step: 0.25, color: "#f0abfc" },
+    { key: "square-plus-180", label: "正方形壓力 180°", step: 0.5, color: "#e879f9" },
+  ];
+  const levels: GannLevel[] = rawLevels
+    .map((level) => ({
+      key: level.key,
+      label: level.label,
+      value: Math.max(0, (root + level.step) ** 2),
+      color: level.color,
+      lineWidth: level.step === 0 ? (2 as const) : (1 as const),
+    }))
+    .filter((level) => level.value > 0)
+    .sort((left, right) => right.value - left.value);
+  return {
+    startIndex: Math.max(0, bars.length - 60),
+    endIndex: bars.length - 1,
+    anchor,
+    levels,
+  };
+}
+
 export function StockChart({ bars, signal }: { bars: Bar[]; signal?: Signal | null }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gannBox = buildGannBox(bars, signal);
+  const gannSquare = buildGannSquare(bars, signal);
 
   useEffect(() => {
     if (!containerRef.current || bars.length === 0) return;
     const activeGannBox = buildGannBox(bars, signal);
+    const activeGannSquare = buildGannSquare(bars, signal);
     const chart = createChart(containerRef.current, {
       height: 360,
       layout: {
@@ -221,10 +271,10 @@ export function StockChart({ bars, signal }: { bars: Bar[]; signal?: Signal | nu
       lastValueVisible: false,
     });
     ma20.setData(movingAverage(bars, 20));
-    if (activeGannBox) {
-      const startTime = bars[activeGannBox.startIndex].trade_date as Time;
-      const endTime = bars[activeGannBox.endIndex].trade_date as Time;
-      activeGannBox.levels.forEach((level) => {
+    const drawGannLines = (group: GannLineGroup, titlePrefix: string) => {
+      const startTime = bars[group.startIndex].trade_date as Time;
+      const endTime = bars[group.endIndex].trade_date as Time;
+      group.levels.forEach((level) => {
         const line = chart.addSeries(LineSeries, {
           color: level.color,
           lineWidth: level.lineWidth,
@@ -242,10 +292,12 @@ export function StockChart({ bars, signal }: { bars: Bar[]; signal?: Signal | nu
           lineWidth: level.lineWidth,
           lineStyle: 2,
           axisLabelVisible: true,
-          title: `江恩${level.label}`,
+          title: `${titlePrefix}${level.label}`,
         });
       });
-    }
+    };
+    if (activeGannBox) drawGannLines(activeGannBox, "江恩箱");
+    if (activeGannSquare) drawGannLines(activeGannSquare, "江恩");
     chart.timeScale().fitContent();
 
     const observer = new ResizeObserver(([entry]) => {
@@ -269,8 +321,8 @@ export function StockChart({ bars, signal }: { bars: Bar[]; signal?: Signal | nu
                 江恩箱參考線
               </div>
               <div className="mt-1 text-[11px] text-slate-400">
-                目前位階 {gannBox.position.toFixed(0)}%｜箱體 {formatPrice(gannBox.low)}
-                ～{formatPrice(gannBox.high)}
+                目前位階 {(gannBox.position ?? 0).toFixed(0)}%｜箱體{" "}
+                {formatPrice(gannBox.low ?? 0)}～{formatPrice(gannBox.high ?? 0)}
               </div>
             </div>
             <div className="text-[11px] text-slate-500">
@@ -288,6 +340,40 @@ export function StockChart({ bars, signal }: { bars: Bar[]; signal?: Signal | nu
                   {level.label}
                 </div>
                 <div className="mt-1 text-sm font-semibold text-violet-100">
+                  {formatPrice(level.value)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {gannSquare && (
+        <div className="mt-3 rounded-xl border border-fuchsia-400/20 bg-fuchsia-400/5 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-bold tracking-wider text-fuchsia-200">
+                江恩正方形參考線
+              </div>
+              <div className="mt-1 text-[11px] text-slate-400">
+                基準價 {formatPrice(gannSquare.anchor ?? bars[bars.length - 1].close)}
+                ｜Square of Nine 90° / 180° 支撐壓力
+              </div>
+            </div>
+            <div className="text-[11px] text-slate-500">
+              站上上方角度線偏強，跌破下方角度線轉弱
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {gannSquare.levels.map((level) => (
+              <div key={level.key} className="rounded-lg bg-slate-950/35 p-2">
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                  <span
+                    className="h-1.5 w-4 rounded-full"
+                    style={{ backgroundColor: level.color }}
+                  />
+                  {level.label}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-fuchsia-100">
                   {formatPrice(level.value)}
                 </div>
               </div>
