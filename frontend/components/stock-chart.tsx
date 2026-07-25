@@ -97,11 +97,18 @@ function formatPrice(value: number) {
   return value.toFixed(2);
 }
 
+function lowestBarIndex(bars: Bar[], startIndex: number) {
+  let lowestIndex = Math.max(0, startIndex);
+  for (let index = lowestIndex + 1; index < bars.length; index += 1) {
+    if (bars[index].low < bars[lowestIndex].low) lowestIndex = index;
+  }
+  return lowestIndex;
+}
+
 function buildGannBox(bars: Bar[], signal?: Signal | null): GannLineGroup | null {
   if (bars.length < 2) return null;
   const metricPeak = metricNumber(signal, "latest_peak");
   const metricTrough = metricNumber(signal, "latest_trough");
-  const metricPeakIndex = metricNumber(signal, "latest_peak_index");
   const metricTroughIndex = metricNumber(signal, "latest_trough_index");
   const fallbackStart = Math.max(0, bars.length - 60);
   const fallbackBars = bars.slice(fallbackStart);
@@ -120,18 +127,17 @@ function buildGannBox(bars: Bar[], signal?: Signal | null): GannLineGroup | null
   if (range <= 0) return null;
 
   const anchorIndex =
-    metricPeakIndex != null && metricTroughIndex != null
-      ? Math.max(0, Math.min(metricPeakIndex, metricTroughIndex))
-      : fallbackStart;
+    metricTroughIndex != null
+      ? Math.max(0, Math.floor(metricTroughIndex))
+      : lowestBarIndex(bars, fallbackStart);
   const startIndex = Math.min(Math.floor(anchorIndex), bars.length - 1);
   const latestClose = bars[bars.length - 1].close;
   const position = ((latestClose - low) / range) * 100;
   const endIndex = bars.length - 1;
   const windowLength = Math.max(8, endIndex - startIndex);
   const priceBarRatio = range / windowLength;
-  const anchorIsLow = latestClose >= low;
-  const anchor = anchorIsLow ? low : high;
-  const directionalRatio = anchorIsLow ? priceBarRatio : -priceBarRatio;
+  const anchor = low;
+  const directionalRatio = priceBarRatio;
   const makeAngleData = (slope: number) =>
     bars.slice(startIndex, endIndex + 1).map((bar, offset) => ({
       time: bar.trade_date as Time,
@@ -209,7 +215,7 @@ function buildGannBox(bars: Bar[], signal?: Signal | null): GannLineGroup | null
     low,
     position,
     anchor,
-    anchorLabel: anchorIsLow ? "低點起算" : "高點起算",
+    anchorLabel: "最低點起算",
     priceBarRatio,
     levels,
     angleLines,
@@ -220,7 +226,6 @@ function buildGannSquare(bars: Bar[], signal?: Signal | null): GannSquareGroup |
   if (bars.length < 12) return null;
   const metricPeak = metricNumber(signal, "latest_peak");
   const metricTrough = metricNumber(signal, "latest_trough");
-  const metricPeakIndex = metricNumber(signal, "latest_peak_index");
   const metricTroughIndex = metricNumber(signal, "latest_trough_index");
   const fallbackStart = Math.max(0, bars.length - 60);
   const fallbackBars = bars.slice(fallbackStart);
@@ -238,23 +243,16 @@ function buildGannSquare(bars: Bar[], signal?: Signal | null): GannSquareGroup |
   const range = high - low;
   if (range <= 0) return null;
 
-  const hasMetricAnchors =
-    metricPeakIndex != null &&
-    metricTroughIndex != null &&
-    metricPeak != null &&
-    metricTrough != null &&
-    metricPeak > metricTrough;
-  const anchorIndex = hasMetricAnchors
-    ? Math.max(0, Math.min(Math.floor(metricPeakIndex), Math.floor(metricTroughIndex)))
-    : fallbackStart;
+  const anchorIndex =
+    metricTroughIndex != null
+      ? Math.max(0, Math.floor(metricTroughIndex))
+      : lowestBarIndex(bars, fallbackStart);
   const endIndex = bars.length - 1;
   const startIndex = Math.min(anchorIndex, Math.max(0, endIndex - 8));
   const windowLength = Math.max(8, endIndex - startIndex);
   const priceBarRatio = range / windowLength;
-  const latestClose = bars[endIndex].close;
-  const anchorIsLow = latestClose >= low;
-  const anchor = anchorIsLow ? low : high;
-  const anchorLabel = anchorIsLow ? "低點起算" : "高點起算";
+  const anchor = low;
+  const anchorLabel = "最低點起算";
 
   const makeAngleData = (slope: number) =>
     bars.slice(startIndex, endIndex + 1).map((bar, offset) => ({
@@ -298,7 +296,7 @@ function buildGannSquare(bars: Bar[], signal?: Signal | null): GannSquareGroup |
       lineWidth: 2,
     },
   ];
-  const directionalRatio = anchorIsLow ? priceBarRatio : -priceBarRatio;
+  const directionalRatio = priceBarRatio;
   const rawAngleLines: GannAngleLine[] = [
     {
       key: "square-1x1",
