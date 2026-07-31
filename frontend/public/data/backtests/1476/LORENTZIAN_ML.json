@@ -1,16 +1,16 @@
 {
-  "expectancy": 0.015349426164572709,
+  "expectancy": 0.009763797966739228,
   "gate_passed": false,
   "gate_reasons": [
-    "交易樣本 2/200"
+    "交易樣本 1/200"
   ],
   "max_drawdown": 0.0,
   "profit_factor": null,
-  "sharpe_like": 1.0560890088059889,
+  "sharpe_like": 0.0,
   "strategy": "LORENTZIAN_ML",
   "strategy_version": "2026.07.v16",
-  "symbol": "1907",
-  "total_return": 0.030723213767110513,
-  "trades": 2,
+  "symbol": "1476",
+  "total_return": 0.009763797966739318,
+  "trades": 1,
   "win_rate": 1.0
 }

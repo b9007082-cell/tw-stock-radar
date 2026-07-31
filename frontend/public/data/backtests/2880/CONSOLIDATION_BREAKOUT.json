@@ -1,5 +1,5 @@
 {
-  "expectancy": 0.12375665707918473,
+  "expectancy": 0.07769502640216955,
   "gate_passed": false,
   "gate_reasons": [
     "交易樣本 1/200"
@@ -7,10 +7,10 @@
   "max_drawdown": 0.0,
   "profit_factor": null,
   "sharpe_like": 0.0,
-  "strategy": "PULLBACK_RESUME",
+  "strategy": "CONSOLIDATION_BREAKOUT",
   "strategy_version": "2026.07.v16",
-  "symbol": "2886",
-  "total_return": 0.12375665707918482,
+  "symbol": "2880",
+  "total_return": 0.07769502640216963,
   "trades": 1,
   "win_rate": 1.0
 }
