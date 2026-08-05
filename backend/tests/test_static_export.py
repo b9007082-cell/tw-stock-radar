@@ -66,11 +66,12 @@ def test_static_export_produces_deterministic_contract(tmp_path) -> None:
     assert summary["instruments"] == 3
     assert isinstance(signals, list)
     assert recommendations["as_of"] == latest_date.isoformat()
-    assert recommendations["ranking_version"] == "2026.07.r7"
+    assert recommendations["ranking_version"] == "2026.08.r8"
     assert "recommendations.json" in first["checksums"]
     assert isinstance(recommendations["pullback_resume"], list)
     assert isinstance(recommendations["consolidation_breakout"], list)
     assert isinstance(recommendations["bottom_reversal"], list)
+    assert isinstance(recommendations["bollinger_squeeze"], list)
     assert isinstance(recommendations["lorentzian_ml"], list)
     for signal in signals:
         backtest_path = (

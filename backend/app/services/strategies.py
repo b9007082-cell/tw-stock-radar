@@ -28,6 +28,11 @@ LORENTZIAN_ADX_THRESHOLD = 20
 LORENTZIAN_KERNEL_LOOKBACK = 8
 LORENTZIAN_KERNEL_RELATIVE_WEIGHTING = 8.0
 LORENTZIAN_KERNEL_START = 25
+BOLLINGER_PERIOD = 20
+BOLLINGER_MULTIPLIER = 2.0
+BOLLINGER_LOOKBACK = 80
+BOLLINGER_MAX_WIDTH_PERCENTILE = 0.2
+BOLLINGER_BREAKOUT_VOLUME_MULTIPLE = 1.2
 
 
 @dataclass(frozen=True)
@@ -90,6 +95,13 @@ def _trend_context(bars: Sequence[Bar]) -> TrendContext | None:
 
 def _average(values: Sequence[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def _stddev(values: Sequence[float]) -> float:
+    if not values:
+        return 0.0
+    mean = _average(values)
+    return math.sqrt(_average([(value - mean) ** 2 for value in values]))
 
 
 def _ema(values: Sequence[float], period: int) -> list[float]:
@@ -743,6 +755,147 @@ def bottom_reversal_signal(
     )
 
 
+def _bollinger_series(
+    closes: Sequence[float],
+    period: int = BOLLINGER_PERIOD,
+    multiplier: float = BOLLINGER_MULTIPLIER,
+) -> list[tuple[float, float, float, float] | None]:
+    result: list[tuple[float, float, float, float] | None] = [None] * len(closes)
+    for index in range(period - 1, len(closes)):
+        window = closes[index - period + 1 : index + 1]
+        middle = _average(window)
+        deviation = _stddev(window)
+        upper = middle + deviation * multiplier
+        lower = middle - deviation * multiplier
+        width_percent = ((upper - lower) / middle) * 100 if middle > 0 else 0.0
+        result[index] = (upper, middle, lower, width_percent)
+    return result
+
+
+def bollinger_squeeze_signal(
+    bars: Sequence[Bar],
+) -> StrategySignal | None:
+    if len(bars) < BOLLINGER_LOOKBACK + BOLLINGER_PERIOD:
+        return None
+    latest = bars[-1]
+    previous = bars[-2]
+    if latest.volume < MIN_TRADE_VOLUME_SHARES:
+        return None
+    closes = [bar.close for bar in bars]
+    bands = _bollinger_series(closes)
+    latest_band = bands[-1]
+    if latest_band is None:
+        return None
+    upper, middle, lower, width_percent = latest_band
+    if middle <= 0 or lower <= 0:
+        return None
+
+    recent_widths = [
+        band[3]
+        for band in bands[-BOLLINGER_LOOKBACK:]
+        if band is not None and band[3] > 0
+    ]
+    if len(recent_widths) < BOLLINGER_LOOKBACK // 2:
+        return None
+    narrower_count = sum(1 for width in recent_widths if width <= width_percent)
+    width_percentile = narrower_count / len(recent_widths)
+    squeeze_confirmed = width_percentile <= BOLLINGER_MAX_WIDTH_PERCENTILE
+    if not squeeze_confirmed:
+        return None
+
+    recent_window = bars[-BOLLINGER_LOOKBACK:]
+    range_high = max(bar.high for bar in recent_window)
+    range_low = min(bar.low for bar in recent_window)
+    range_high_index = len(bars) - BOLLINGER_LOOKBACK + max(
+        range(len(recent_window)),
+        key=lambda index: recent_window[index].high,
+    )
+    range_low_index = len(bars) - BOLLINGER_LOOKBACK + min(
+        range(len(recent_window)),
+        key=lambda index: recent_window[index].low,
+    )
+    context = _range_context(
+        bars,
+        range_high=range_high,
+        range_low=range_low,
+        range_high_index=range_high_index,
+        range_low_index=range_low_index,
+    )
+    if context is None:
+        return None
+
+    volume20 = _average([float(bar.volume) for bar in bars[-21:-1]])
+    volume_ratio = float(latest.volume) / volume20 if volume20 else 0.0
+    breakout_upper = latest.close > upper and latest.close > previous.high
+    trial_upper = latest.high > upper or latest.close > middle
+    volume_confirmed = volume_ratio >= BOLLINGER_BREAKOUT_VOLUME_MULTIPLE
+    if breakout_upper and volume_confirmed:
+        level = SignalLevel.CONFIRMED
+        timing_status = "READY"
+        timing_note = (
+            "布林通道長時間收斂後，收盤突破上通道與前一日高點，"
+            "且成交量高於20日均量，波動擴張買點成立。"
+        )
+        trigger_price = max(upper, previous.high)
+        score = 90
+    elif trial_upper:
+        level = SignalLevel.TRIAL
+        timing_status = "TRIAL_ENTRY"
+        timing_note = (
+            "布林通道處於低寬度收斂，股價已靠近或測試上通道，"
+            "但尚未同時完成收盤突破與量能確認。"
+        )
+        trigger_price = max(upper, previous.high)
+        score = 78
+    else:
+        level = SignalLevel.WATCH
+        timing_status = "WAIT_CONFIRMATION"
+        timing_note = (
+            "布林上通道與下通道靠近，波動壓縮中；等待收盤突破上通道與量能放大。"
+        )
+        trigger_price = max(upper, previous.high)
+        score = 68
+
+    return _signal(
+        strategy="BOLLINGER_SQUEEZE",
+        level=level,
+        bars=bars,
+        context=context,
+        score=score,
+        trigger_price=trigger_price,
+        timing_status=timing_status,
+        timing_note=timing_note,
+        reasons=[
+            "20日布林通道上軌與下軌靠近，波動進入低檔收斂",
+            f"布林寬度 {width_percent:.2f}%，位於近{BOLLINGER_LOOKBACK}日低分位 {width_percentile * 100:.0f}%",
+            f"成交張數 {latest.volume / 1000:.0f} 張，大於{MIN_TRADE_VOLUME_LOTS:.0f}張",
+            (
+                "收盤突破上通道與前一日高點，且量能放大"
+                if level == SignalLevel.CONFIRMED
+                else "等待收盤突破上通道與前一日高點"
+            ),
+        ],
+        extra_metrics={
+            "latest_volume_lots": latest.volume / 1000,
+            "minimum_volume_lots": MIN_TRADE_VOLUME_LOTS,
+            "bollinger_period": float(BOLLINGER_PERIOD),
+            "bollinger_multiplier": BOLLINGER_MULTIPLIER,
+            "bollinger_upper": upper,
+            "bollinger_middle": middle,
+            "bollinger_lower": lower,
+            "bollinger_width_percent": width_percent,
+            "bollinger_width_percentile": width_percentile,
+            "bollinger_width_threshold_percentile": BOLLINGER_MAX_WIDTH_PERCENTILE,
+            "bollinger_squeeze_confirmed": squeeze_confirmed,
+            "bollinger_breakout_upper": breakout_upper,
+            "volume20": volume20,
+            "volume_ratio": volume_ratio,
+            "volume_confirmed": volume_confirmed,
+            "previous_high": previous.high,
+        },
+    )
+
+
 def _rsi_series(closes: Sequence[float], period: int) -> list[float | None]:
     result: list[float | None] = [None] * len(closes)
     if len(closes) <= period:
@@ -1311,6 +1464,7 @@ def scan_bars(
         pullback_resume_signal(bars),
         consolidation_signal(bars),
         bottom_reversal_signal(bars),
+        bollinger_squeeze_signal(bars),
         lorentzian_ml_signal(bars, relative_strength_percentile),
     ]
     return [signal for signal in signals if signal is not None]

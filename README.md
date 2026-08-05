@@ -193,7 +193,7 @@ npm audit --omit=dev
 data/raw/YYYY-MM-DD.json.gz       六個月官方行情日檔
 data/state/manifest.json          日期、筆數與 checksum
 frontend/public/data/             網站使用的最新訊號與候選 K 線
-frontend/public/data/recommendations.json  每日四套 Top 10
+frontend/public/data/recommendations.json  每日五套 Top 10
 frontend/out/                     GitHub Pages build artifact
 ```
 

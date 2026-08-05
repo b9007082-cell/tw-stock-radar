@@ -8,7 +8,7 @@
   "profit_factor": null,
   "sharpe_like": 0.0,
   "strategy": "LORENTZIAN_ML",
-  "strategy_version": "2026.07.v16",
+  "strategy_version": "2026.08.v17",
   "symbol": "1907",
   "total_return": 0.01640899100899129,
   "trades": 1,

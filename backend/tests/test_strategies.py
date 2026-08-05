@@ -3,6 +3,7 @@ import math
 
 from app.domain import Bar, SignalLevel
 from app.services.strategies import (
+    bollinger_squeeze_signal,
     bottom_reversal_signal,
     consolidation_signal,
     lorentzian_ml_signal,
@@ -136,6 +137,17 @@ def _lorentzian_bars(volume: int = 3_000_000) -> list[Bar]:
         volume=volume,
         turnover=100_000_000,
     )
+    return bars
+
+
+def _bollinger_squeeze_bars(volume: int = 3_000_000) -> list[Bar]:
+    bars: list[Bar] = []
+    for index in range(130):
+        close = 100 + math.sin(index / 3) * 5
+        bars.append(_bar(index, close, volume))
+    for index in range(30):
+        close = 100 + math.sin(index) * 0.35
+        bars.append(_bar(len(bars), close, volume))
     return bars
 
 
@@ -344,8 +356,27 @@ def test_lorentzian_ml_rejects_low_liquidity() -> None:
     assert lorentzian_ml_signal(_lorentzian_bars(volume=1_900_000), 0.8) is None
 
 
+def test_bollinger_squeeze_finds_narrow_band_watch_signal() -> None:
+    signal = bollinger_squeeze_signal(_bollinger_squeeze_bars())
+    assert signal is not None
+    assert signal.strategy == "BOLLINGER_SQUEEZE"
+    assert signal.level in {SignalLevel.WATCH, SignalLevel.TRIAL, SignalLevel.CONFIRMED}
+    assert signal.metrics["bollinger_squeeze_confirmed"] is True
+    assert signal.metrics["bollinger_width_percentile"] <= 0.2
+    assert signal.metrics["latest_volume_lots"] >= 2000
+
+
+def test_bollinger_squeeze_rejects_low_liquidity() -> None:
+    assert bollinger_squeeze_signal(_bollinger_squeeze_bars(volume=1_900_000)) is None
+
+
 def test_scan_keeps_direction_and_buy_point_signals() -> None:
     signals = scan_bars(_pullback_bars(SignalLevel.CONFIRMED))
     strategies = {signal.strategy for signal in signals}
     assert "TREND_CONFIRMATION" in strategies
     assert "PULLBACK_RESUME" in strategies
+
+
+def test_scan_includes_bollinger_squeeze() -> None:
+    strategies = {signal.strategy for signal in scan_bars(_bollinger_squeeze_bars())}
+    assert "BOLLINGER_SQUEEZE" in strategies

@@ -5,7 +5,7 @@ from typing import Any
 
 
 RECOMMENDATION_LIMIT = 10
-RECOMMENDATION_VERSION = "2026.07.r7"
+RECOMMENDATION_VERSION = "2026.08.r8"
 MAX_STRUCTURE_RISK_PERCENT = 8.0
 MIN_PULLBACK_REWARD_RISK = 1.5
 MAX_LORENTZIAN_RISK_PERCENT = 10.0
@@ -212,6 +212,52 @@ def _lorentzian_score(
     return round(score, 1), round(risk_percent, 2), reasons
 
 
+def _bollinger_squeeze_score(
+    signal: Mapping[str, Any],
+    metrics: Mapping[str, Any],
+) -> tuple[float, float, list[str]] | None:
+    close = _number(signal.get("close"))
+    upper = _number(metrics.get("bollinger_upper"))
+    lower = _number(metrics.get("bollinger_lower"))
+    width_percent = _number(metrics.get("bollinger_width_percent"))
+    width_percentile = _number(metrics.get("bollinger_width_percentile"))
+    volume_ratio = _number(metrics.get("volume_ratio")) or 0.0
+    if (
+        close is None
+        or upper is None
+        or lower is None
+        or width_percent is None
+        or width_percentile is None
+        or upper <= lower
+    ):
+        return None
+    squeeze_score = 35 * _clamp((0.25 - width_percentile) / 0.25)
+    distance_to_upper = (upper - close) / upper if close <= upper else 0.0
+    observation_risk_percent = max(0.0, distance_to_upper) * 100
+    proximity_score = 25 * _clamp(1.0 - distance_to_upper / 0.04)
+    breakout_score = 15 if metrics.get("bollinger_breakout_upper") is True else 0
+    volume_score = 15 * _clamp((volume_ratio - 0.8) / 0.8)
+    score = (
+        squeeze_score
+        + proximity_score
+        + breakout_score
+        + volume_score
+        + _risk_score(observation_risk_percent, weight=10.0)
+    )
+    reasons = [
+        f"布林寬度 {width_percent:.2f}%",
+        f"寬度分位 {width_percentile * 100:.0f}%",
+        f"距上軌 {max(0.0, distance_to_upper) * 100:.2f}%",
+        "突破上軌" if metrics.get("bollinger_breakout_upper") is True else "等待突破上軌",
+    ]
+    latest_volume_lots = _number(metrics.get("latest_volume_lots"))
+    if latest_volume_lots is not None:
+        reasons.append(f"成交 {latest_volume_lots:.0f}張")
+    if volume_ratio:
+        reasons.append(f"量比 {volume_ratio:.2f}倍")
+    return round(score, 1), round(observation_risk_percent, 2), reasons
+
+
 def build_recommendations(
     signals: Sequence[Mapping[str, Any]],
     *,
@@ -221,6 +267,7 @@ def build_recommendations(
         "pullback_resume": [],
         "consolidation_breakout": [],
         "bottom_reversal": [],
+        "bollinger_squeeze": [],
         "lorentzian_ml": [],
     }
     for signal in signals:
@@ -263,6 +310,24 @@ def build_recommendations(
                     "rank": 0,
                     "recommendation_score": score,
                     "structure_risk_percent": risk_percent,
+                    "reward_risk_ratio": None,
+                    "ranking_reasons": reasons,
+                }
+            )
+            continue
+        if strategy == "BOLLINGER_SQUEEZE":
+            if level not in {"WATCH", "TRIAL", "CONFIRMED"}:
+                continue
+            result = _bollinger_squeeze_score(signal, metrics)
+            if result is None:
+                continue
+            score, observation_risk_percent, reasons = result
+            grouped["bollinger_squeeze"].append(
+                {
+                    **signal,
+                    "rank": 0,
+                    "recommendation_score": score,
+                    "structure_risk_percent": observation_risk_percent,
                     "reward_risk_ratio": None,
                     "ranking_reasons": reasons,
                 }

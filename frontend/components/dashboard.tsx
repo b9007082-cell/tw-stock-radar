@@ -28,6 +28,7 @@ const strategyLabel: Record<Signal["strategy"], string> = {
   PULLBACK_RESUME: "回後買上漲",
   CONSOLIDATION_BREAKOUT: "盤整突破",
   BOTTOM_REVERSAL: "搶反彈",
+  BOLLINGER_SQUEEZE: "布林收斂",
   LORENTZIAN_ML: "Lorentzian ML",
 };
 
@@ -36,6 +37,7 @@ const strategyTabs = [
   ["PULLBACK_RESUME", "回後買上漲"],
   ["CONSOLIDATION_BREAKOUT", "盤整突破"],
   ["BOTTOM_REVERSAL", "搶反彈"],
+  ["BOLLINGER_SQUEEZE", "布林收斂"],
   ["LORENTZIAN_ML", "Lorentzian ML"],
 ] as const;
 
@@ -94,6 +96,36 @@ function formatLots(signal: Signal) {
 }
 
 function TrendMetricsPanel({ signal }: { signal: Signal }) {
+  if (signal.strategy === "BOLLINGER_SQUEEZE") {
+    const width = metricNumber(signal, "bollinger_width_percent");
+    const percentile = metricNumber(signal, "bollinger_width_percentile");
+    const items = [
+      ["布林寬度", width == null ? "—" : `${width.toFixed(2)}%`],
+      [
+        "寬度分位",
+        percentile == null ? "—" : `${(percentile * 100).toFixed(0)}%`,
+      ],
+      ["上通道", formatPrice(metricNumber(signal, "bollinger_upper"))],
+      ["下通道", formatPrice(metricNumber(signal, "bollinger_lower"))],
+    ];
+    return (
+      <div className="mt-4 rounded-xl border border-fuchsia-400/20 bg-fuchsia-400/5 p-3">
+        <div className="mb-3 text-xs font-bold tracking-wider text-fuchsia-200">
+          布林通道收斂檢查
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {items.map(([label, value]) => (
+            <div key={label} className="rounded-lg bg-slate-950/35 p-2.5">
+              <div className="text-[10px] text-slate-500">{label}</div>
+              <div className="mt-1 text-sm font-semibold text-fuchsia-100">
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
   const higherHigh = signal.metrics.higher_high === true;
   const higherLow = signal.metrics.higher_low === true;
   const items = [
@@ -167,7 +199,7 @@ function RecommendationBoard({
   title: string;
   subtitle: string;
   items: RecommendationItem[];
-  accent: "emerald" | "cyan" | "amber" | "violet";
+  accent: "emerald" | "cyan" | "amber" | "fuchsia" | "violet";
   onSelect: (item: RecommendationItem) => void;
 }) {
   const accentClass =
@@ -177,7 +209,9 @@ function RecommendationBoard({
         ? "text-cyan-300"
         : accent === "amber"
           ? "text-amber-300"
-          : "text-violet-300";
+          : accent === "fuchsia"
+            ? "text-fuchsia-300"
+            : "text-violet-300";
   return (
     <article className="overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/70 backdrop-blur">
       <div className="border-b border-slate-800 px-4 py-3">
@@ -191,6 +225,11 @@ function RecommendationBoard({
           const stopVolumeRatio = metricNumber(item, "stop_volume_ratio");
           const mlPrediction = metricNumber(item, "ml_prediction");
           const mlConfidence = metricNumber(item, "ml_confidence");
+          const bollingerWidth = metricNumber(item, "bollinger_width_percent");
+          const bollingerPercentile = metricNumber(
+            item,
+            "bollinger_width_percentile",
+          );
           return (
             <button
               key={`${item.strategy}-${item.symbol}`}
@@ -216,7 +255,9 @@ function RecommendationBoard({
                         ? `跌幅 ${drawdownPercent?.toFixed(1) ?? "—"}%`
                         : item.strategy === "LORENTZIAN_ML"
                           ? `ML ${mlPrediction?.toFixed(0) ?? "—"}`
-                          : `量比 ${volumeRatio?.toFixed(2) ?? "—"}倍`}
+                          : item.strategy === "BOLLINGER_SQUEEZE"
+                            ? `寬度 ${bollingerWidth?.toFixed(2) ?? "—"}%`
+                            : `量比 ${volumeRatio?.toFixed(2) ?? "—"}倍`}
                   </span>
                   {item.strategy === "BOTTOM_REVERSAL" && (
                     <span>爆量 {stopVolumeRatio?.toFixed(2) ?? "—"}倍</span>
@@ -224,6 +265,14 @@ function RecommendationBoard({
                   {item.strategy === "LORENTZIAN_ML" && (
                     <span>
                       信心 {mlConfidence == null ? "—" : `${(mlConfidence * 100).toFixed(0)}%`}
+                    </span>
+                  )}
+                  {item.strategy === "BOLLINGER_SQUEEZE" && (
+                    <span>
+                      分位{" "}
+                      {bollingerPercentile == null
+                        ? "—"
+                        : `${(bollingerPercentile * 100).toFixed(0)}%`}
                     </span>
                   )}
                   </span>
@@ -369,7 +418,7 @@ export function Dashboard() {
             台股起漲雷達
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            回後買上漲 × 盤整突破 × 搶反彈 × Lorentzian ML｜依公開教學原則量化
+            回後買上漲 × 盤整突破 × 搶反彈 × 布林收斂 × Lorentzian ML｜依公開教學原則量化
           </p>
         </div>
         <div className="text-left text-xs leading-6 text-slate-400 sm:text-right">
@@ -412,7 +461,7 @@ export function Dashboard() {
         ))}
       </section>
 
-      <section className="mb-5 grid gap-4 xl:grid-cols-4">
+      <section className="mb-5 grid gap-4 xl:grid-cols-5">
         <RecommendationBoard
           title="回後買上漲 Top 10"
           subtitle="確認優先｜風險 ≤ 8%｜前高空間 ≥ 1.5R"
@@ -432,6 +481,13 @@ export function Dashboard() {
           subtitle="急跌 ≥ 15%｜低檔爆量 ≥ 2倍｜突破止跌K高點"
           items={recommendations?.bottom_reversal ?? []}
           accent="amber"
+          onSelect={selectRecommendation}
+        />
+        <RecommendationBoard
+          title="布林收斂 Top 10"
+          subtitle="上通道與下通道靠近｜等待突破方向"
+          items={recommendations?.bollinger_squeeze ?? []}
+          accent="fuchsia"
           onSelect={selectRecommendation}
         />
         <RecommendationBoard

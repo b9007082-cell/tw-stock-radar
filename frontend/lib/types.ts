@@ -28,6 +28,7 @@ export interface Signal {
     | "PULLBACK_RESUME"
     | "CONSOLIDATION_BREAKOUT"
     | "BOTTOM_REVERSAL"
+    | "BOLLINGER_SQUEEZE"
     | "LORENTZIAN_ML";
   strategy_version: string;
   level: SignalLevel;
@@ -62,6 +63,7 @@ export interface DailyRecommendations {
   pullback_resume: RecommendationItem[];
   consolidation_breakout: RecommendationItem[];
   bottom_reversal: RecommendationItem[];
+  bollinger_squeeze: RecommendationItem[];
   lorentzian_ml: RecommendationItem[];
 }
 
