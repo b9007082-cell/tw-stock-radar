@@ -5,7 +5,7 @@ from typing import Any
 
 
 RECOMMENDATION_LIMIT = 10
-RECOMMENDATION_VERSION = "2026.08.r9"
+RECOMMENDATION_VERSION = "2026.08.r10"
 MAX_STRUCTURE_RISK_PERCENT = 8.0
 MIN_PULLBACK_REWARD_RISK = 1.5
 MAX_LORENTZIAN_RISK_PERCENT = 10.0
@@ -286,6 +286,38 @@ def _intraday_ma60_score(
     return round(score, 1), round(distance, 2), reasons
 
 
+def _low_price_high_yield_score(
+    signal: Mapping[str, Any],
+    metrics: Mapping[str, Any],
+) -> tuple[float, float, list[str]] | None:
+    dividend_yield = _number(metrics.get("dividend_yield"))
+    drawdown = _number(metrics.get("drawdown_from_high_percent"))
+    distance_from_low = _number(metrics.get("distance_from_low_percent"))
+    pb_ratio = _number(metrics.get("pb_ratio"))
+    pe_ratio = _number(metrics.get("pe_ratio"))
+    volume_lots = _number(metrics.get("latest_volume_lots"))
+    if dividend_yield is None or drawdown is None or distance_from_low is None:
+        return None
+    yield_score = 36 * _clamp((dividend_yield - 5.0) / 4.0)
+    low_score = 26 * _clamp((20.0 - distance_from_low) / 20.0)
+    drawdown_score = 18 * _clamp((drawdown - 12.0) / 18.0)
+    pb_score = 12 * _clamp((1.8 - (pb_ratio or 1.8)) / 1.0)
+    volume_score = 8 * _clamp(((volume_lots or 0.0) - 2000) / 8000)
+    score = yield_score + low_score + drawdown_score + pb_score + volume_score
+    reasons = [
+        f"殖利率 {dividend_yield:.2f}%",
+        f"高點回落 {drawdown:.1f}%",
+        f"距低點 {distance_from_low:.1f}%",
+    ]
+    if pb_ratio is not None:
+        reasons.append(f"P/B {pb_ratio:.2f}")
+    if pe_ratio is not None and pe_ratio > 0:
+        reasons.append(f"本益比 {pe_ratio:.2f}")
+    if volume_lots is not None:
+        reasons.append(f"成交 {volume_lots:.0f}張")
+    return round(score, 1), round(distance_from_low, 2), reasons
+
+
 def build_recommendations(
     signals: Sequence[Mapping[str, Any]],
     *,
@@ -297,6 +329,7 @@ def build_recommendations(
         "bottom_reversal": [],
         "bollinger_squeeze": [],
         "intraday_ma60_touch": [],
+        "low_price_high_yield": [],
         "lorentzian_ml": [],
     }
     for signal in signals:
@@ -370,6 +403,24 @@ def build_recommendations(
                 continue
             score, distance_percent, reasons = result
             grouped["intraday_ma60_touch"].append(
+                {
+                    **signal,
+                    "rank": 0,
+                    "recommendation_score": score,
+                    "structure_risk_percent": distance_percent,
+                    "reward_risk_ratio": None,
+                    "ranking_reasons": reasons,
+                }
+            )
+            continue
+        if strategy == "LOW_PRICE_HIGH_YIELD":
+            if level not in {"WATCH", "TRIAL", "CONFIRMED"}:
+                continue
+            result = _low_price_high_yield_score(signal, metrics)
+            if result is None:
+                continue
+            score, distance_percent, reasons = result
+            grouped["low_price_high_yield"].append(
                 {
                     **signal,
                     "rank": 0,

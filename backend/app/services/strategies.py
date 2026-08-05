@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 import math
 
-from app.domain import Bar, IntradayBar, SignalLevel, StrategySignal
+from app.domain import Bar, IntradayBar, SignalLevel, StrategySignal, ValuationMetrics
 from app.services.indicators import confirmed_swings, percent_change, sma
 
 
@@ -36,6 +36,11 @@ BOLLINGER_BREAKOUT_VOLUME_MULTIPLE = 1.2
 INTRADAY_MA_PERIOD = 60
 INTRADAY_MA_MAX_DISTANCE_PERCENT = 1.5
 INTRADAY_MA_READY_DISTANCE_PERCENT = 0.6
+HIGH_YIELD_LOOKBACK = 100
+HIGH_YIELD_MIN_DIVIDEND_YIELD = 5.0
+HIGH_YIELD_MIN_DRAWDOWN_PERCENT = 8.0
+HIGH_YIELD_MAX_DISTANCE_FROM_LOW_PERCENT = 35.0
+HIGH_YIELD_MAX_PB_RATIO = 2.5
 
 
 @dataclass(frozen=True)
@@ -1583,6 +1588,154 @@ def intraday_ma60_touch_signal(
             "risk_percent": risk_percent if ready else None,
             "executable": ready and risk_valid,
         }
+    )
+
+
+def low_price_high_yield_signal(
+    bars: Sequence[Bar],
+    valuation: ValuationMetrics,
+) -> StrategySignal | None:
+    if len(bars) < HIGH_YIELD_LOOKBACK:
+        return None
+    latest = bars[-1]
+    if latest.volume < MIN_TRADE_VOLUME_SHARES:
+        return None
+    if valuation.dividend_yield < HIGH_YIELD_MIN_DIVIDEND_YIELD:
+        return None
+    if (
+        valuation.pb_ratio is not None
+        and valuation.pb_ratio > HIGH_YIELD_MAX_PB_RATIO
+    ):
+        return None
+
+    window = bars[-HIGH_YIELD_LOOKBACK:]
+    range_high = max(bar.high for bar in window)
+    range_low = min(bar.low for bar in window)
+    if range_high <= 0 or range_low <= 0:
+        return None
+
+    drawdown_percent = ((range_high - latest.close) / range_high) * 100
+    distance_from_low_percent = ((latest.close - range_low) / range_low) * 100
+    if drawdown_percent < HIGH_YIELD_MIN_DRAWDOWN_PERCENT:
+        return None
+    if distance_from_low_percent > HIGH_YIELD_MAX_DISTANCE_FROM_LOW_PERCENT:
+        return None
+
+    closes = [bar.close for bar in bars]
+    ma20s = sma(closes, 20)
+    ma60s = sma(closes, 60)
+    ma20 = float(ma20s[-1] or 0.0)
+    ma60 = float(ma60s[-1] or 0.0)
+    ma20_5 = float(ma20s[-6] or ma20) if len(ma20s) >= 6 else ma20
+    if min(ma20, ma60) <= 0:
+        return None
+
+    recent_low = min(bar.low for bar in bars[-20:])
+    previous = bars[-2]
+    stable_above_recent_low = latest.low >= recent_low * 1.01
+    reclaim_ma20 = latest.close > ma20 and previous.close <= float(ma20s[-2] or ma20)
+    above_ma20 = latest.close > ma20
+    ma20_flattening = ma20 >= ma20_5 * 0.995
+    pe_reasonable = valuation.pe_ratio is None or valuation.pe_ratio <= 20
+    pb_reasonable = valuation.pb_ratio is None or valuation.pb_ratio <= 1.2
+
+    if reclaim_ma20 and ma20_flattening:
+        level = SignalLevel.CONFIRMED
+        timing_status = "READY"
+        timing_note = "低檔高殖利率且收盤轉強站回20日線；可小部位觀察，不追高。"
+        score = 74
+        trigger_price = max(latest.high, ma20)
+        entry_price = latest.close
+    elif above_ma20 or stable_above_recent_low:
+        level = SignalLevel.TRIAL
+        timing_status = "TRIAL_ENTRY"
+        timing_note = "低檔高殖利率已止穩；等待站回20日線或紅K續強確認。"
+        score = 66
+        trigger_price = max(ma20, previous.high)
+        entry_price = None
+    else:
+        level = SignalLevel.WATCH
+        timing_status = "WAIT_CONFIRMATION"
+        timing_note = "低檔與殖利率條件成立；尚未出現明確轉強K線。"
+        score = 58
+        trigger_price = max(ma20, previous.high)
+        entry_price = None
+
+    stop_price = round(recent_low * 0.99, 2)
+    risk_percent, risk_valid = (
+        _risk(entry_price, stop_price) if entry_price is not None else (0.0, False)
+    )
+    dividend_per_share = (
+        latest.close * valuation.dividend_yield / 100
+        if valuation.dividend_per_share is None
+        else valuation.dividend_per_share
+    )
+    reasons = [
+        f"殖利率 {valuation.dividend_yield:.2f}% ≥ {HIGH_YIELD_MIN_DIVIDEND_YIELD:.0f}%",
+        f"近{HIGH_YIELD_LOOKBACK}日高點回落 {drawdown_percent:.1f}%",
+        f"距近{HIGH_YIELD_LOOKBACK}日低點 {distance_from_low_percent:.1f}%",
+        f"P/B {valuation.pb_ratio:.2f}" if valuation.pb_ratio is not None else "P/B 無資料",
+        f"成交 {latest.volume / 1000:.0f}張",
+    ]
+    if pe_reasonable:
+        reasons.append(
+            f"本益比 {valuation.pe_ratio:.2f}"
+            if valuation.pe_ratio is not None
+            else "本益比無資料"
+        )
+    if pb_reasonable:
+        reasons.append("淨值比相對低")
+
+    return StrategySignal(
+        strategy="LOW_PRICE_HIGH_YIELD",
+        level=level,
+        signal_date=latest.date,
+        score=score,
+        close=latest.close,
+        entry_price=round(entry_price, 2) if entry_price is not None else None,
+        entry_zone_low=(
+            round(min(latest.close, trigger_price), 2)
+            if level == SignalLevel.CONFIRMED
+            else None
+        ),
+        entry_zone_high=(
+            round(max(latest.close, trigger_price), 2)
+            if level == SignalLevel.CONFIRMED
+            else None
+        ),
+        trigger_price=round(trigger_price, 2),
+        stop_price=stop_price,
+        risk_percent=risk_percent if level == SignalLevel.CONFIRMED else None,
+        timing_status=timing_status,
+        timing_note=timing_note,
+        overheated=False,
+        executable=level == SignalLevel.CONFIRMED and risk_valid,
+        reasons=reasons,
+        metrics={
+            "latest_volume_lots": latest.volume / 1000,
+            "minimum_volume_lots": MIN_TRADE_VOLUME_LOTS,
+            "liquidity_ok": latest.volume >= MIN_TRADE_VOLUME_SHARES,
+            "dividend_yield": valuation.dividend_yield,
+            "dividend_per_share": dividend_per_share,
+            "pe_ratio": valuation.pe_ratio or 0.0,
+            "pb_ratio": valuation.pb_ratio or 0.0,
+            "valuation_date": valuation.trade_date.isoformat(),
+            "low_price_lookback": float(HIGH_YIELD_LOOKBACK),
+            "range_high": range_high,
+            "range_low": range_low,
+            "drawdown_from_high_percent": drawdown_percent,
+            "distance_from_low_percent": distance_from_low_percent,
+            "ma20": ma20,
+            "ma60": ma60,
+            "ma20_slope_5d": percent_change(ma20, ma20_5),
+            "stable_above_recent_low": stable_above_recent_low,
+            "reclaim_ma20": reclaim_ma20,
+            "above_ma20": above_ma20,
+            "pe_reasonable": pe_reasonable,
+            "pb_reasonable": pb_reasonable,
+            "structure_risk_percent": risk_percent,
+            "structure_risk_valid": risk_valid,
+        },
     )
 
 

@@ -31,6 +31,18 @@ class IntradayBar:
 
 
 @dataclass(frozen=True)
+class ValuationMetrics:
+    symbol: str
+    name: str
+    market: str
+    trade_date: date
+    pe_ratio: float | None
+    dividend_yield: float
+    dividend_per_share: float | None
+    pb_ratio: float | None
+
+
+@dataclass(frozen=True)
 class StrategySignal:
     strategy: str
     level: SignalLevel

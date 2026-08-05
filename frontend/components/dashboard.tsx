@@ -30,6 +30,7 @@ const strategyLabel: Record<Signal["strategy"], string> = {
   BOTTOM_REVERSAL: "搶反彈",
   BOLLINGER_SQUEEZE: "布林收斂",
   INTRADAY_MA60_TOUCH: "60分K近60MA",
+  LOW_PRICE_HIGH_YIELD: "低檔高殖利率",
   LORENTZIAN_ML: "Lorentzian ML",
 };
 
@@ -40,6 +41,7 @@ const strategyTabs = [
   ["BOTTOM_REVERSAL", "搶反彈"],
   ["BOLLINGER_SQUEEZE", "布林收斂"],
   ["INTRADAY_MA60_TOUCH", "60分K近60MA"],
+  ["LOW_PRICE_HIGH_YIELD", "低檔高殖利率"],
   ["LORENTZIAN_ML", "Lorentzian ML"],
 ] as const;
 
@@ -98,6 +100,39 @@ function formatLots(signal: Signal) {
 }
 
 function TrendMetricsPanel({ signal }: { signal: Signal }) {
+  if (signal.strategy === "LOW_PRICE_HIGH_YIELD") {
+    const dividendYield = metricNumber(signal, "dividend_yield");
+    const drawdown = metricNumber(signal, "drawdown_from_high_percent");
+    const distanceFromLow = metricNumber(signal, "distance_from_low_percent");
+    const pbRatio = metricNumber(signal, "pb_ratio");
+    const peRatio = metricNumber(signal, "pe_ratio");
+    const valuationDate = signal.metrics.valuation_date;
+    const items = [
+      ["殖利率", dividendYield == null ? "—" : `${dividendYield.toFixed(2)}%`],
+      ["高點回落", drawdown == null ? "—" : `${drawdown.toFixed(1)}%`],
+      ["距低點", distanceFromLow == null ? "—" : `${distanceFromLow.toFixed(1)}%`],
+      ["P/B", pbRatio == null || pbRatio === 0 ? "—" : pbRatio.toFixed(2)],
+      ["本益比", peRatio == null || peRatio === 0 ? "—" : peRatio.toFixed(2)],
+      ["估值日", typeof valuationDate === "string" ? valuationDate : "—"],
+    ];
+    return (
+      <div className="mt-4 rounded-xl border border-lime-400/20 bg-lime-400/5 p-3">
+        <div className="mb-3 text-xs font-bold tracking-wider text-lime-200">
+          低檔高殖利率檢查
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {items.map(([label, value]) => (
+            <div key={label} className="rounded-lg bg-slate-950/35 p-2.5">
+              <div className="text-[10px] text-slate-500">{label}</div>
+              <div className="mt-1 text-sm font-semibold text-lime-100">
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
   if (signal.strategy === "INTRADAY_MA60_TOUCH") {
     const distance = metricNumber(signal, "intraday_distance_to_ma60_percent");
     const ma60 = metricNumber(signal, "intraday_ma60");
@@ -230,7 +265,7 @@ function RecommendationBoard({
   title: string;
   subtitle: string;
   items: RecommendationItem[];
-  accent: "emerald" | "cyan" | "amber" | "fuchsia" | "sky" | "violet";
+  accent: "emerald" | "cyan" | "amber" | "fuchsia" | "sky" | "lime" | "violet";
   onSelect: (item: RecommendationItem) => void;
 }) {
   const accentClass =
@@ -244,7 +279,9 @@ function RecommendationBoard({
             ? "text-fuchsia-300"
             : accent === "sky"
               ? "text-sky-300"
-              : "text-violet-300";
+              : accent === "lime"
+                ? "text-lime-300"
+                : "text-violet-300";
   return (
     <article className="overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/70 backdrop-blur">
       <div className="border-b border-slate-800 px-4 py-3">
@@ -270,6 +307,11 @@ function RecommendationBoard({
           const intradaySlope = metricNumber(
             item,
             "intraday_ma60_slope_percent",
+          );
+          const dividendYield = metricNumber(item, "dividend_yield");
+          const distanceFromLow = metricNumber(
+            item,
+            "distance_from_low_percent",
           );
           return (
             <button
@@ -300,7 +342,9 @@ function RecommendationBoard({
                             ? `寬度 ${bollingerWidth?.toFixed(2) ?? "—"}%`
                             : item.strategy === "INTRADAY_MA60_TOUCH"
                               ? `距60MA ${intradayDistance?.toFixed(2) ?? "—"}%`
-                              : `量比 ${volumeRatio?.toFixed(2) ?? "—"}倍`}
+                              : item.strategy === "LOW_PRICE_HIGH_YIELD"
+                                ? `殖利率 ${dividendYield?.toFixed(2) ?? "—"}%`
+                                : `量比 ${volumeRatio?.toFixed(2) ?? "—"}倍`}
                   </span>
                   {item.strategy === "BOTTOM_REVERSAL" && (
                     <span>爆量 {stopVolumeRatio?.toFixed(2) ?? "—"}倍</span>
@@ -321,6 +365,12 @@ function RecommendationBoard({
                   {item.strategy === "INTRADAY_MA60_TOUCH" && (
                     <span>
                       斜率 {intradaySlope == null ? "—" : `${intradaySlope.toFixed(2)}%`}
+                    </span>
+                  )}
+                  {item.strategy === "LOW_PRICE_HIGH_YIELD" && (
+                    <span>
+                      距低點{" "}
+                      {distanceFromLow == null ? "—" : `${distanceFromLow.toFixed(1)}%`}
                     </span>
                   )}
                   </span>
@@ -466,7 +516,7 @@ export function Dashboard() {
             台股起漲雷達
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            回後買上漲 × 盤整突破 × 搶反彈 × 布林收斂 × 60分K近60MA × Lorentzian ML｜依公開教學原則量化
+            回後買上漲 × 盤整突破 × 搶反彈 × 布林收斂 × 60分K近60MA × 低檔高殖利率 × Lorentzian ML｜依公開教學原則量化
           </p>
         </div>
         <div className="text-left text-xs leading-6 text-slate-400 sm:text-right">
@@ -509,7 +559,7 @@ export function Dashboard() {
         ))}
       </section>
 
-      <section className="mb-5 grid gap-4 xl:grid-cols-6">
+      <section className="mb-5 grid gap-4 xl:grid-cols-7">
         <RecommendationBoard
           title="回後買上漲 Top 10"
           subtitle="確認優先｜風險 ≤ 8%｜前高空間 ≥ 1.5R"
@@ -543,6 +593,13 @@ export function Dashboard() {
           subtitle="60分鐘K線靠近60MA｜短線回測觀察"
           items={recommendations?.intraday_ma60_touch ?? []}
           accent="sky"
+          onSelect={selectRecommendation}
+        />
+        <RecommendationBoard
+          title="低檔高殖利率 Top 10"
+          subtitle="殖利率 ≥ 5%｜低位階｜成交 ≥ 2000張"
+          items={recommendations?.low_price_high_yield ?? []}
+          accent="lime"
           onSelect={selectRecommendation}
         />
         <RecommendationBoard

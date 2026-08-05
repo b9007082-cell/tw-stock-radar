@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 from app.config import get_settings
 from app.domain import Bar
 from app.domain import IntradayBar
+from app.domain import ValuationMetrics
 from app.services.backtest import backtest
 from app.services.history_store import DataQualityError, read_snapshot
 from app.services.intraday_data import YahooIntradayClient
@@ -21,7 +22,12 @@ from app.services.recommendations import (
     RECOMMENDATION_VERSION,
     build_recommendations,
 )
-from app.services.strategies import intraday_ma60_touch_signal, scan_bars
+from app.services.strategies import (
+    intraday_ma60_touch_signal,
+    low_price_high_yield_signal,
+    scan_bars,
+)
+from app.services.valuation_data import OfficialValuationClient
 
 
 def _json_bytes(payload: Any) -> bytes:
@@ -95,6 +101,8 @@ def export_static_data(
     max_age_days: int = 14,
     intraday_fetch: bool = True,
     intraday_provider: Any | None = None,
+    valuation_fetch: bool = True,
+    valuation_provider: Any | None = None,
 ) -> dict[str, Any]:
     settings = get_settings()
     snapshots = sorted(raw_dir.glob("*.json.gz"))
@@ -197,6 +205,26 @@ def export_static_data(
         for result in scan_bars(bars, ranks[symbol]):
             append_signal(symbol, result)
 
+    valuation_available = 0
+    valuation_matched = 0
+    valuation_errors = 0
+    if valuation_fetch:
+        try:
+            valuation_provider = valuation_provider or OfficialValuationClient().fetch_all
+            valuations: dict[str, ValuationMetrics] = valuation_provider()
+        except Exception:
+            valuations = {}
+            valuation_errors += 1
+        valuation_available = len(valuations)
+        for symbol, bars in eligible.items():
+            valuation = valuations.get(symbol)
+            if valuation is None:
+                continue
+            valuation_matched += 1
+            result = low_price_high_yield_signal(bars, valuation)
+            if result is not None:
+                append_signal(symbol, result)
+
     intraday_attempted = 0
     intraday_available = 0
     intraday_errors = 0
@@ -247,6 +275,9 @@ def export_static_data(
         "intraday_scanned": intraday_attempted,
         "intraday_available": intraday_available,
         "intraday_errors": intraday_errors,
+        "valuation_available": valuation_available,
+        "valuation_matched": valuation_matched,
+        "valuation_errors": valuation_errors,
     }
 
     output_dir.parent.mkdir(parents=True, exist_ok=True)

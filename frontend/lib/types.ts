@@ -30,6 +30,7 @@ export interface Signal {
     | "BOTTOM_REVERSAL"
     | "BOLLINGER_SQUEEZE"
     | "INTRADAY_MA60_TOUCH"
+    | "LOW_PRICE_HIGH_YIELD"
     | "LORENTZIAN_ML";
   strategy_version: string;
   level: SignalLevel;
@@ -66,6 +67,7 @@ export interface DailyRecommendations {
   bottom_reversal: RecommendationItem[];
   bollinger_squeeze: RecommendationItem[];
   intraday_ma60_touch: RecommendationItem[];
+  low_price_high_yield: RecommendationItem[];
   lorentzian_ml: RecommendationItem[];
 }
 

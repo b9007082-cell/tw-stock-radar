@@ -121,6 +121,9 @@ def recommendations(
             pullback_resume=[],
             consolidation_breakout=[],
             bottom_reversal=[],
+            bollinger_squeeze=[],
+            intraday_ma60_touch=[],
+            low_price_high_yield=[],
             lorentzian_ml=[],
         )
     rows = session.execute(
@@ -133,6 +136,9 @@ def recommendations(
                     "PULLBACK_RESUME",
                     "CONSOLIDATION_BREAKOUT",
                     "BOTTOM_REVERSAL",
+                    "BOLLINGER_SQUEEZE",
+                    "INTRADAY_MA60_TOUCH",
+                    "LOW_PRICE_HIGH_YIELD",
                     "LORENTZIAN_ML",
                 ]
             ),
@@ -149,6 +155,9 @@ def recommendations(
         pullback_resume=ranked["pullback_resume"],
         consolidation_breakout=ranked["consolidation_breakout"],
         bottom_reversal=ranked["bottom_reversal"],
+        bollinger_squeeze=ranked["bollinger_squeeze"],
+        intraday_ma60_touch=ranked["intraday_ma60_touch"],
+        low_price_high_yield=ranked["low_price_high_yield"],
         lorentzian_ml=ranked["lorentzian_ml"],
     )
 
@@ -194,7 +203,8 @@ def instrument_backtest(
         default="PULLBACK_RESUME",
         pattern=(
             "^(TREND_CONFIRMATION|PULLBACK_RESUME|"
-            "CONSOLIDATION_BREAKOUT|BOTTOM_REVERSAL|LORENTZIAN_ML)$"
+            "CONSOLIDATION_BREAKOUT|BOTTOM_REVERSAL|BOLLINGER_SQUEEZE|"
+            "INTRADAY_MA60_TOUCH|LOW_PRICE_HIGH_YIELD|LORENTZIAN_ML)$"
         ),
     ),
     session: Session = Depends(get_db),

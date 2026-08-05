@@ -289,6 +289,42 @@ def test_intraday_ma60_touch_has_independent_ranking_bucket() -> None:
     assert items[0]["structure_risk_percent"] == 0.2
 
 
+def test_low_price_high_yield_has_independent_ranking_bucket() -> None:
+    low_yield = _signal(
+        "7001",
+        "LOW_PRICE_HIGH_YIELD",
+        level="WATCH",
+        close=80,
+        extra_metrics={
+            "dividend_yield": 5.2,
+            "drawdown_from_high_percent": 14.0,
+            "distance_from_low_percent": 18.0,
+            "pb_ratio": 1.4,
+            "pe_ratio": 14.0,
+            "latest_volume_lots": 2500,
+        },
+    )
+    high_yield = _signal(
+        "7002",
+        "LOW_PRICE_HIGH_YIELD",
+        level="TRIAL",
+        close=80,
+        extra_metrics={
+            "dividend_yield": 7.4,
+            "drawdown_from_high_percent": 28.0,
+            "distance_from_low_percent": 5.0,
+            "pb_ratio": 0.8,
+            "pe_ratio": 9.0,
+            "latest_volume_lots": 3600,
+        },
+    )
+    result = build_recommendations([low_yield, high_yield])
+    items = result["low_price_high_yield"]
+    assert [item["symbol"] for item in items] == ["7002", "7001"]
+    assert "殖利率 7.40%" in items[0]["ranking_reasons"]
+    assert items[0]["structure_risk_percent"] == 5.0
+
+
 def test_unknown_fields_do_not_change_snapshot_ranking() -> None:
     signal = _signal("1001", "CONSOLIDATION_BREAKOUT")
     baseline = build_recommendations([signal])["consolidation_breakout"][0]

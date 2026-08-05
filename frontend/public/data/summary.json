@@ -6,8 +6,11 @@
   "intraday_errors": 0,
   "intraday_scanned": 300,
   "strategy_approved": false,
-  "strategy_version": "2026.08.v18",
-  "total_signals": 103,
-  "trial": 33,
-  "watch": 57
+  "strategy_version": "2026.08.v19",
+  "total_signals": 125,
+  "trial": 47,
+  "valuation_available": 1736,
+  "valuation_errors": 0,
+  "valuation_matched": 675,
+  "watch": 65
 }

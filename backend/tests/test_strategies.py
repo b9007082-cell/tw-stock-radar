@@ -1,12 +1,13 @@
 from datetime import date, datetime, timedelta
 import math
 
-from app.domain import Bar, IntradayBar, SignalLevel
+from app.domain import Bar, IntradayBar, SignalLevel, ValuationMetrics
 from app.services.strategies import (
     bollinger_squeeze_signal,
     bottom_reversal_signal,
     consolidation_signal,
     intraday_ma60_touch_signal,
+    low_price_high_yield_signal,
     lorentzian_ml_signal,
     pullback_resume_signal,
     scan_bars,
@@ -40,6 +41,29 @@ def _intraday_bar(index: int, close: float, volume: int = 120_000) -> IntradayBa
 def _intraday_ma60_bars() -> list[IntradayBar]:
     bars = [_intraday_bar(index, 100 + index * 0.01) for index in range(64)]
     bars.append(_intraday_bar(64, 100.82))
+    return bars
+
+
+def _valuation(dividend_yield: float = 6.2) -> ValuationMetrics:
+    return ValuationMetrics(
+        symbol="1102",
+        name="亞泥",
+        market="TWSE",
+        trade_date=date(2026, 8, 5),
+        pe_ratio=11.0,
+        dividend_yield=dividend_yield,
+        dividend_per_share=2.5,
+        pb_ratio=0.8,
+    )
+
+
+def _low_price_high_yield_bars(volume: int = 3_000_000) -> list[Bar]:
+    bars: list[Bar] = []
+    for index in range(90):
+        bars.append(_bar(index, 100 - index * 0.25, volume))
+    for index in range(90, 120):
+        bars.append(_bar(index, 76 + ((index - 90) % 6) * 0.35, volume))
+    bars[-1] = _bar(119, 78.0, volume)
     return bars
 
 
@@ -411,6 +435,25 @@ def test_intraday_ma60_touch_rejects_low_daily_liquidity() -> None:
         turnover=latest.turnover,
     )
     assert intraday_ma60_touch_signal(daily, _intraday_ma60_bars()) is None
+
+
+def test_low_price_high_yield_finds_low_level_income_candidate() -> None:
+    signal = low_price_high_yield_signal(_low_price_high_yield_bars(), _valuation())
+    assert signal is not None
+    assert signal.strategy == "LOW_PRICE_HIGH_YIELD"
+    assert signal.metrics["dividend_yield"] >= 5
+    assert signal.metrics["drawdown_from_high_percent"] >= 12
+    assert signal.metrics["distance_from_low_percent"] <= 20
+    assert signal.metrics["latest_volume_lots"] >= 2000
+
+
+def test_low_price_high_yield_rejects_low_dividend_yield() -> None:
+    assert (
+        low_price_high_yield_signal(
+            _low_price_high_yield_bars(), _valuation(dividend_yield=4.9)
+        )
+        is None
+    )
 
 
 def test_scan_keeps_direction_and_buy_point_signals() -> None:

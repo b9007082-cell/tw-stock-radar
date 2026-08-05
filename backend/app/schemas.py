@@ -43,6 +43,9 @@ class RecommendationsResponse(BaseModel):
     pullback_resume: list[RecommendationItemResponse]
     consolidation_breakout: list[RecommendationItemResponse]
     bottom_reversal: list[RecommendationItemResponse]
+    bollinger_squeeze: list[RecommendationItemResponse]
+    intraday_ma60_touch: list[RecommendationItemResponse]
+    low_price_high_yield: list[RecommendationItemResponse]
     lorentzian_ml: list[RecommendationItemResponse]
 
 
