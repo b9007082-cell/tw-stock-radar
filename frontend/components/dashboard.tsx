@@ -29,6 +29,7 @@ const strategyLabel: Record<Signal["strategy"], string> = {
   CONSOLIDATION_BREAKOUT: "盤整突破",
   BOTTOM_REVERSAL: "搶反彈",
   BOLLINGER_SQUEEZE: "布林收斂",
+  INTRADAY_MA60_TOUCH: "60分K近60MA",
   LORENTZIAN_ML: "Lorentzian ML",
 };
 
@@ -38,6 +39,7 @@ const strategyTabs = [
   ["CONSOLIDATION_BREAKOUT", "盤整突破"],
   ["BOTTOM_REVERSAL", "搶反彈"],
   ["BOLLINGER_SQUEEZE", "布林收斂"],
+  ["INTRADAY_MA60_TOUCH", "60分K近60MA"],
   ["LORENTZIAN_ML", "Lorentzian ML"],
 ] as const;
 
@@ -96,6 +98,35 @@ function formatLots(signal: Signal) {
 }
 
 function TrendMetricsPanel({ signal }: { signal: Signal }) {
+  if (signal.strategy === "INTRADAY_MA60_TOUCH") {
+    const distance = metricNumber(signal, "intraday_distance_to_ma60_percent");
+    const ma60 = metricNumber(signal, "intraday_ma60");
+    const slope = metricNumber(signal, "intraday_ma60_slope_percent");
+    const barTime = signal.metrics.intraday_bar_time;
+    const items = [
+      ["60分MA60", formatPrice(ma60)],
+      ["距60MA", distance == null ? "—" : `${distance.toFixed(2)}%`],
+      ["60MA斜率", slope == null ? "—" : `${slope.toFixed(2)}%`],
+      ["資料時間", typeof barTime === "string" ? barTime.slice(5, 16) : "—"],
+    ];
+    return (
+      <div className="mt-4 rounded-xl border border-sky-400/20 bg-sky-400/5 p-3">
+        <div className="mb-3 text-xs font-bold tracking-wider text-sky-200">
+          60分K MA60 檢查
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {items.map(([label, value]) => (
+            <div key={label} className="rounded-lg bg-slate-950/35 p-2.5">
+              <div className="text-[10px] text-slate-500">{label}</div>
+              <div className="mt-1 text-sm font-semibold text-sky-100">
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
   if (signal.strategy === "BOLLINGER_SQUEEZE") {
     const width = metricNumber(signal, "bollinger_width_percent");
     const percentile = metricNumber(signal, "bollinger_width_percentile");
@@ -199,7 +230,7 @@ function RecommendationBoard({
   title: string;
   subtitle: string;
   items: RecommendationItem[];
-  accent: "emerald" | "cyan" | "amber" | "fuchsia" | "violet";
+  accent: "emerald" | "cyan" | "amber" | "fuchsia" | "sky" | "violet";
   onSelect: (item: RecommendationItem) => void;
 }) {
   const accentClass =
@@ -211,7 +242,9 @@ function RecommendationBoard({
           ? "text-amber-300"
           : accent === "fuchsia"
             ? "text-fuchsia-300"
-            : "text-violet-300";
+            : accent === "sky"
+              ? "text-sky-300"
+              : "text-violet-300";
   return (
     <article className="overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/70 backdrop-blur">
       <div className="border-b border-slate-800 px-4 py-3">
@@ -229,6 +262,14 @@ function RecommendationBoard({
           const bollingerPercentile = metricNumber(
             item,
             "bollinger_width_percentile",
+          );
+          const intradayDistance = metricNumber(
+            item,
+            "intraday_distance_to_ma60_percent",
+          );
+          const intradaySlope = metricNumber(
+            item,
+            "intraday_ma60_slope_percent",
           );
           return (
             <button
@@ -257,7 +298,9 @@ function RecommendationBoard({
                           ? `ML ${mlPrediction?.toFixed(0) ?? "—"}`
                           : item.strategy === "BOLLINGER_SQUEEZE"
                             ? `寬度 ${bollingerWidth?.toFixed(2) ?? "—"}%`
-                            : `量比 ${volumeRatio?.toFixed(2) ?? "—"}倍`}
+                            : item.strategy === "INTRADAY_MA60_TOUCH"
+                              ? `距60MA ${intradayDistance?.toFixed(2) ?? "—"}%`
+                              : `量比 ${volumeRatio?.toFixed(2) ?? "—"}倍`}
                   </span>
                   {item.strategy === "BOTTOM_REVERSAL" && (
                     <span>爆量 {stopVolumeRatio?.toFixed(2) ?? "—"}倍</span>
@@ -273,6 +316,11 @@ function RecommendationBoard({
                       {bollingerPercentile == null
                         ? "—"
                         : `${(bollingerPercentile * 100).toFixed(0)}%`}
+                    </span>
+                  )}
+                  {item.strategy === "INTRADAY_MA60_TOUCH" && (
+                    <span>
+                      斜率 {intradaySlope == null ? "—" : `${intradaySlope.toFixed(2)}%`}
                     </span>
                   )}
                   </span>
@@ -418,7 +466,7 @@ export function Dashboard() {
             台股起漲雷達
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            回後買上漲 × 盤整突破 × 搶反彈 × 布林收斂 × Lorentzian ML｜依公開教學原則量化
+            回後買上漲 × 盤整突破 × 搶反彈 × 布林收斂 × 60分K近60MA × Lorentzian ML｜依公開教學原則量化
           </p>
         </div>
         <div className="text-left text-xs leading-6 text-slate-400 sm:text-right">
@@ -461,7 +509,7 @@ export function Dashboard() {
         ))}
       </section>
 
-      <section className="mb-5 grid gap-4 xl:grid-cols-5">
+      <section className="mb-5 grid gap-4 xl:grid-cols-6">
         <RecommendationBoard
           title="回後買上漲 Top 10"
           subtitle="確認優先｜風險 ≤ 8%｜前高空間 ≥ 1.5R"
@@ -488,6 +536,13 @@ export function Dashboard() {
           subtitle="上通道與下通道靠近｜等待突破方向"
           items={recommendations?.bollinger_squeeze ?? []}
           accent="fuchsia"
+          onSelect={selectRecommendation}
+        />
+        <RecommendationBoard
+          title="60分K近60MA Top 10"
+          subtitle="60分鐘K線靠近60MA｜短線回測觀察"
+          items={recommendations?.intraday_ma60_touch ?? []}
+          accent="sky"
           onSelect={selectRecommendation}
         />
         <RecommendationBoard

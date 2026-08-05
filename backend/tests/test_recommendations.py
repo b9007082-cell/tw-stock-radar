@@ -255,6 +255,40 @@ def test_bollinger_squeeze_has_independent_ranking_bucket() -> None:
     assert items[0]["structure_risk_percent"] == 0.49
 
 
+def test_intraday_ma60_touch_has_independent_ranking_bucket() -> None:
+    far = _signal(
+        "6001",
+        "INTRADAY_MA60_TOUCH",
+        level="WATCH",
+        close=100,
+        extra_metrics={
+            "intraday_abs_distance_to_ma60_percent": 1.4,
+            "intraday_distance_to_ma60_percent": -1.4,
+            "intraday_ma60": 101.4,
+            "intraday_ma60_slope_percent": -0.1,
+            "daily_volume_lots": 2500,
+        },
+    )
+    near = _signal(
+        "6002",
+        "INTRADAY_MA60_TOUCH",
+        level="CONFIRMED",
+        close=100,
+        extra_metrics={
+            "intraday_abs_distance_to_ma60_percent": 0.2,
+            "intraday_distance_to_ma60_percent": 0.2,
+            "intraday_ma60": 99.8,
+            "intraday_ma60_slope_percent": 0.25,
+            "daily_volume_lots": 6200,
+        },
+    )
+    result = build_recommendations([far, near])
+    items = result["intraday_ma60_touch"]
+    assert [item["symbol"] for item in items] == ["6002", "6001"]
+    assert "距60分MA60 +0.20%" in items[0]["ranking_reasons"]
+    assert items[0]["structure_risk_percent"] == 0.2
+
+
 def test_unknown_fields_do_not_change_snapshot_ranking() -> None:
     signal = _signal("1001", "CONSOLIDATION_BREAKOUT")
     baseline = build_recommendations([signal])["consolidation_breakout"][0]

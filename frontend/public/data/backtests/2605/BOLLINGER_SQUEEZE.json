@@ -10,7 +10,7 @@
   "profit_factor": 0.0,
   "sharpe_like": 0.0,
   "strategy": "BOLLINGER_SQUEEZE",
-  "strategy_version": "2026.08.v17",
+  "strategy_version": "2026.08.v18",
   "symbol": "2605",
   "total_return": -0.07386967263505717,
   "trades": 1,

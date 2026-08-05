@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 import math
 
-from app.domain import Bar, SignalLevel, StrategySignal
+from app.domain import Bar, IntradayBar, SignalLevel, StrategySignal
 from app.services.indicators import confirmed_swings, percent_change, sma
 
 
@@ -33,6 +33,9 @@ BOLLINGER_MULTIPLIER = 2.0
 BOLLINGER_LOOKBACK = 80
 BOLLINGER_MAX_WIDTH_PERCENTILE = 0.2
 BOLLINGER_BREAKOUT_VOLUME_MULTIPLE = 1.2
+INTRADAY_MA_PERIOD = 60
+INTRADAY_MA_MAX_DISTANCE_PERCENT = 1.5
+INTRADAY_MA_READY_DISTANCE_PERCENT = 0.6
 
 
 @dataclass(frozen=True)
@@ -1453,6 +1456,133 @@ def lorentzian_ml_signal(
             "structure_risk_valid": risk_valid,
             "source_license_mpl_2_0": True,
         },
+    )
+
+
+def intraday_ma60_touch_signal(
+    daily_bars: Sequence[Bar],
+    intraday_bars: Sequence[IntradayBar],
+) -> StrategySignal | None:
+    if len(daily_bars) < MIN_BARS or len(intraday_bars) < INTRADAY_MA_PERIOD:
+        return None
+    latest_daily = daily_bars[-1]
+    if latest_daily.volume < MIN_TRADE_VOLUME_SHARES:
+        return None
+
+    closes = [bar.close for bar in intraday_bars]
+    ma60s = sma(closes, INTRADAY_MA_PERIOD)
+    latest_ma60 = float(ma60s[-1] or 0.0)
+    previous_ma60 = float(ma60s[-6] or latest_ma60) if len(ma60s) >= 6 else latest_ma60
+    if latest_ma60 <= 0:
+        return None
+
+    latest = intraday_bars[-1]
+    previous = intraday_bars[-2]
+    distance_percent = ((latest.close - latest_ma60) / latest_ma60) * 100
+    abs_distance_percent = abs(distance_percent)
+    if abs_distance_percent > INTRADAY_MA_MAX_DISTANCE_PERCENT:
+        return None
+
+    ma60_slope_percent = percent_change(latest_ma60, previous_ma60)
+    recent_window = intraday_bars[-INTRADAY_MA_PERIOD:]
+    recent_low = min(bar.low for bar in recent_window)
+    recent_high = max(bar.high for bar in recent_window)
+    range_high_index = len(daily_bars) - 1
+    range_low_index = len(daily_bars) - 1
+    context = _range_context(
+        daily_bars,
+        range_high=max(recent_high, latest_daily.high),
+        range_low=min(recent_low, latest_daily.low),
+        range_high_index=range_high_index,
+        range_low_index=range_low_index,
+    )
+    if context is None:
+        return None
+
+    reclaimed_ma60 = previous.close < latest_ma60 <= latest.close
+    above_ma60 = latest.close >= latest_ma60
+    ready = (
+        above_ma60
+        and abs_distance_percent <= INTRADAY_MA_READY_DISTANCE_PERCENT
+        and latest.close >= previous.close
+        and ma60_slope_percent >= -0.3
+    )
+    if ready:
+        level = SignalLevel.CONFIRMED
+        timing_status = "READY"
+        timing_note = (
+            "60分K股價貼近並站上60MA，且60MA斜率未明顯轉弱；"
+            "屬於短線回測均線後的確認觀察點。"
+        )
+        score = 88
+    elif above_ma60 or reclaimed_ma60:
+        level = SignalLevel.TRIAL
+        timing_status = "TRIAL_ENTRY"
+        timing_note = (
+            "60分K已靠近或剛站上60MA，但距離、斜率或短線K棒尚未完全確認。"
+        )
+        score = 78
+    else:
+        level = SignalLevel.WATCH
+        timing_status = "WAIT_CONFIRMATION"
+        timing_note = (
+            "60分K接近60MA下方，等待站回60MA並出現轉強K棒。"
+        )
+        score = 68
+
+    risk_percent, risk_valid = _risk(latest.close, min(recent_low, latest_ma60 * 0.98))
+    stop_price = min(recent_low, latest_ma60 * 0.98)
+    signal = _signal(
+        strategy="INTRADAY_MA60_TOUCH",
+        level=level,
+        bars=daily_bars,
+        context=context,
+        score=score,
+        trigger_price=latest_ma60,
+        timing_status=timing_status,
+        timing_note=timing_note,
+        reasons=[
+            f"60分K收盤 {latest.close:.2f}，距60MA {distance_percent:+.2f}%",
+            f"60MA {latest_ma60:.2f}，近5根斜率 {ma60_slope_percent:+.2f}%",
+            f"日成交張數 {latest_daily.volume / 1000:.0f} 張，大於{MIN_TRADE_VOLUME_LOTS:.0f}張",
+            (
+                "已貼近並站上60MA"
+                if above_ma60
+                else "接近60MA下方，等待站回確認"
+            ),
+        ],
+        extra_metrics={
+            "timeframe": "60m",
+            "intraday_ma_period": float(INTRADAY_MA_PERIOD),
+            "intraday_close": latest.close,
+            "intraday_previous_close": previous.close,
+            "intraday_ma60": latest_ma60,
+            "intraday_ma60_slope_percent": ma60_slope_percent,
+            "intraday_distance_to_ma60_percent": distance_percent,
+            "intraday_abs_distance_to_ma60_percent": abs_distance_percent,
+            "intraday_max_distance_percent": INTRADAY_MA_MAX_DISTANCE_PERCENT,
+            "intraday_bar_time": latest.timestamp.isoformat(),
+            "intraday_volume_lots": latest.volume / 1000,
+            "daily_volume_lots": latest_daily.volume / 1000,
+            "reclaimed_intraday_ma60": reclaimed_ma60,
+            "above_intraday_ma60": above_ma60,
+            "structure_risk_percent": risk_percent,
+            "structure_risk_valid": risk_valid,
+        },
+    )
+    return StrategySignal(
+        **{
+            **signal.__dict__,
+            "signal_date": latest.timestamp.date(),
+            "close": latest.close,
+            "entry_price": latest.close if ready else None,
+            "entry_zone_low": min(latest.close, latest_ma60) if ready else None,
+            "entry_zone_high": max(latest.close, latest_ma60) if ready else None,
+            "trigger_price": round(latest_ma60, 2),
+            "stop_price": round(stop_price, 2),
+            "risk_percent": risk_percent if ready else None,
+            "executable": ready and risk_valid,
+        }
     )
 
 

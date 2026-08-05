@@ -13,13 +13,15 @@ from zoneinfo import ZoneInfo
 
 from app.config import get_settings
 from app.domain import Bar
+from app.domain import IntradayBar
 from app.services.backtest import backtest
 from app.services.history_store import DataQualityError, read_snapshot
+from app.services.intraday_data import YahooIntradayClient
 from app.services.recommendations import (
     RECOMMENDATION_VERSION,
     build_recommendations,
 )
-from app.services.strategies import scan_bars
+from app.services.strategies import intraday_ma60_touch_signal, scan_bars
 
 
 def _json_bytes(payload: Any) -> bytes:
@@ -91,6 +93,8 @@ def export_static_data(
     *,
     reference_date: date | None = None,
     max_age_days: int = 14,
+    intraday_fetch: bool = True,
+    intraday_provider: Any | None = None,
 ) -> dict[str, Any]:
     settings = get_settings()
     snapshots = sorted(raw_dir.glob("*.json.gz"))
@@ -150,44 +154,74 @@ def export_static_data(
     signals: list[dict[str, Any]] = []
     candidate_symbols: set[str] = set()
     candidate_strategies: dict[str, set[str]] = defaultdict(set)
+
+    def append_signal(symbol: str, result: Any) -> None:
+        candidate_symbols.add(symbol)
+        candidate_strategies[symbol].add(result.strategy)
+        metrics = {
+            **result.metrics,
+            "risk_eligible": result.executable,
+            "strategy_approved": settings.strategy_approved,
+        }
+        signals.append(
+            {
+                "id": 0,
+                **instruments[symbol],
+                "signal_date": result.signal_date.isoformat(),
+                "strategy": result.strategy,
+                "strategy_version": settings.strategy_version,
+                "level": result.level.value,
+                "score": result.score,
+                "close": result.close,
+                "entry_price": result.entry_price,
+                "entry_zone_low": result.entry_zone_low,
+                "entry_zone_high": result.entry_zone_high,
+                "trigger_price": result.trigger_price,
+                "stop_price": result.stop_price,
+                "risk_percent": result.risk_percent,
+                "timing_status": result.timing_status,
+                "timing_note": result.timing_note,
+                "overheated": result.overheated,
+                "executable": result.executable and settings.strategy_approved,
+                "validation_status": (
+                    "APPROVED"
+                    if result.executable and settings.strategy_approved
+                    else "RESEARCH"
+                ),
+                "reasons": result.reasons,
+                "metrics": metrics,
+            }
+        )
+
     for symbol, bars in eligible.items():
         for result in scan_bars(bars, ranks[symbol]):
-            candidate_symbols.add(symbol)
-            candidate_strategies[symbol].add(result.strategy)
-            metrics = {
-                **result.metrics,
-                "risk_eligible": result.executable,
-                "strategy_approved": settings.strategy_approved,
-            }
-            signals.append(
-                {
-                    "id": 0,
-                    **instruments[symbol],
-                    "signal_date": result.signal_date.isoformat(),
-                    "strategy": result.strategy,
-                    "strategy_version": settings.strategy_version,
-                    "level": result.level.value,
-                    "score": result.score,
-                    "close": result.close,
-                    "entry_price": result.entry_price,
-                    "entry_zone_low": result.entry_zone_low,
-                    "entry_zone_high": result.entry_zone_high,
-                    "trigger_price": result.trigger_price,
-                    "stop_price": result.stop_price,
-                    "risk_percent": result.risk_percent,
-                    "timing_status": result.timing_status,
-                    "timing_note": result.timing_note,
-                    "overheated": result.overheated,
-                    "executable": result.executable and settings.strategy_approved,
-                    "validation_status": (
-                        "APPROVED"
-                        if result.executable and settings.strategy_approved
-                        else "RESEARCH"
-                    ),
-                    "reasons": result.reasons,
-                    "metrics": metrics,
-                }
-            )
+            append_signal(symbol, result)
+
+    intraday_attempted = 0
+    intraday_available = 0
+    intraday_errors = 0
+    if intraday_fetch:
+        provider = intraday_provider or YahooIntradayClient().fetch_60m
+        intraday_symbols = sorted(
+            eligible,
+            key=lambda symbol: median(bar.turnover for bar in eligible[symbol][-20:]),
+            reverse=True,
+        )[: settings.intraday_scan_limit]
+        for symbol in intraday_symbols:
+            intraday_attempted += 1
+            try:
+                intraday_bars: list[IntradayBar] = provider(
+                    symbol, instruments[symbol]["market"]
+                )
+            except Exception:
+                intraday_errors += 1
+                continue
+            if not intraday_bars:
+                continue
+            intraday_available += 1
+            result = intraday_ma60_touch_signal(eligible[symbol], intraday_bars)
+            if result is not None:
+                append_signal(symbol, result)
     signals.sort(key=lambda item: (-int(item["score"]), str(item["symbol"])))
     for index, signal in enumerate(signals, start=1):
         signal["id"] = index
@@ -210,6 +244,9 @@ def export_static_data(
         "instruments": len(eligible),
         "strategy_version": settings.strategy_version,
         "strategy_approved": settings.strategy_approved,
+        "intraday_scanned": intraday_attempted,
+        "intraday_available": intraday_available,
+        "intraday_errors": intraday_errors,
     }
 
     output_dir.parent.mkdir(parents=True, exist_ok=True)

@@ -1,11 +1,12 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import math
 
-from app.domain import Bar, SignalLevel
+from app.domain import Bar, IntradayBar, SignalLevel
 from app.services.strategies import (
     bollinger_squeeze_signal,
     bottom_reversal_signal,
     consolidation_signal,
+    intraday_ma60_touch_signal,
     lorentzian_ml_signal,
     pullback_resume_signal,
     scan_bars,
@@ -23,6 +24,23 @@ def _bar(index: int, close: float, volume: int = 3_000_000) -> Bar:
         volume=volume,
         turnover=50_000_000,
     )
+
+
+def _intraday_bar(index: int, close: float, volume: int = 120_000) -> IntradayBar:
+    return IntradayBar(
+        timestamp=datetime(2026, 7, 1, 9) + timedelta(hours=index),
+        open=close - 0.05,
+        high=close + 0.15,
+        low=close - 0.15,
+        close=close,
+        volume=volume,
+    )
+
+
+def _intraday_ma60_bars() -> list[IntradayBar]:
+    bars = [_intraday_bar(index, 100 + index * 0.01) for index in range(64)]
+    bars.append(_intraday_bar(64, 100.82))
+    return bars
 
 
 def _uptrend_base() -> list[Bar]:
@@ -368,6 +386,31 @@ def test_bollinger_squeeze_finds_narrow_band_watch_signal() -> None:
 
 def test_bollinger_squeeze_rejects_low_liquidity() -> None:
     assert bollinger_squeeze_signal(_bollinger_squeeze_bars(volume=1_900_000)) is None
+
+
+def test_intraday_ma60_touch_finds_hourly_ma_support() -> None:
+    signal = intraday_ma60_touch_signal(_uptrend_base(), _intraday_ma60_bars())
+    assert signal is not None
+    assert signal.strategy == "INTRADAY_MA60_TOUCH"
+    assert signal.level in {SignalLevel.TRIAL, SignalLevel.CONFIRMED}
+    assert signal.metrics["timeframe"] == "60m"
+    assert signal.metrics["intraday_abs_distance_to_ma60_percent"] <= 1.5
+    assert signal.metrics["daily_volume_lots"] >= 2000
+
+
+def test_intraday_ma60_touch_rejects_low_daily_liquidity() -> None:
+    daily = _uptrend_base()
+    latest = daily[-1]
+    daily[-1] = Bar(
+        date=latest.date,
+        open=latest.open,
+        high=latest.high,
+        low=latest.low,
+        close=latest.close,
+        volume=1_900_000,
+        turnover=latest.turnover,
+    )
+    assert intraday_ma60_touch_signal(daily, _intraday_ma60_bars()) is None
 
 
 def test_scan_keeps_direction_and_buy_point_signals() -> None:

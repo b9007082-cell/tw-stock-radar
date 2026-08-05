@@ -29,6 +29,7 @@ export interface Signal {
     | "CONSOLIDATION_BREAKOUT"
     | "BOTTOM_REVERSAL"
     | "BOLLINGER_SQUEEZE"
+    | "INTRADAY_MA60_TOUCH"
     | "LORENTZIAN_ML";
   strategy_version: string;
   level: SignalLevel;
@@ -64,6 +65,7 @@ export interface DailyRecommendations {
   consolidation_breakout: RecommendationItem[];
   bottom_reversal: RecommendationItem[];
   bollinger_squeeze: RecommendationItem[];
+  intraday_ma60_touch: RecommendationItem[];
   lorentzian_ml: RecommendationItem[];
 }
 

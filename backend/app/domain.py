@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from enum import StrEnum
 
 
@@ -18,6 +18,16 @@ class Bar:
     close: float
     volume: int
     turnover: float = 0.0
+
+
+@dataclass(frozen=True)
+class IntradayBar:
+    timestamp: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
 
 
 @dataclass(frozen=True)

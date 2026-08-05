@@ -5,7 +5,7 @@ from typing import Any
 
 
 RECOMMENDATION_LIMIT = 10
-RECOMMENDATION_VERSION = "2026.08.r8"
+RECOMMENDATION_VERSION = "2026.08.r9"
 MAX_STRUCTURE_RISK_PERCENT = 8.0
 MIN_PULLBACK_REWARD_RISK = 1.5
 MAX_LORENTZIAN_RISK_PERCENT = 10.0
@@ -258,6 +258,34 @@ def _bollinger_squeeze_score(
     return round(score, 1), round(observation_risk_percent, 2), reasons
 
 
+def _intraday_ma60_score(
+    signal: Mapping[str, Any],
+    metrics: Mapping[str, Any],
+) -> tuple[float, float, list[str]] | None:
+    distance = _number(metrics.get("intraday_abs_distance_to_ma60_percent"))
+    signed_distance = _number(metrics.get("intraday_distance_to_ma60_percent"))
+    slope = _number(metrics.get("intraday_ma60_slope_percent")) or 0.0
+    ma60 = _number(metrics.get("intraday_ma60"))
+    close = _number(metrics.get("intraday_close")) or _number(signal.get("close"))
+    volume_lots = _number(metrics.get("daily_volume_lots"))
+    if distance is None or signed_distance is None or ma60 is None or close is None:
+        return None
+    distance_score = 42 * _clamp((1.5 - distance) / 1.5)
+    slope_score = 24 * _clamp((slope + 0.4) / 1.2)
+    side_score = 18 if signed_distance >= 0 else 8
+    volume_score = 16 * _clamp(((volume_lots or 0.0) - 2000) / 8000)
+    score = distance_score + slope_score + side_score + volume_score
+    reasons = [
+        f"距60分MA60 {signed_distance:+.2f}%",
+        f"60MA {ma60:.2f}",
+        f"60MA斜率 {slope:+.2f}%",
+        "站上60MA" if signed_distance >= 0 else "貼近60MA下方",
+    ]
+    if volume_lots is not None:
+        reasons.append(f"日成交 {volume_lots:.0f}張")
+    return round(score, 1), round(distance, 2), reasons
+
+
 def build_recommendations(
     signals: Sequence[Mapping[str, Any]],
     *,
@@ -268,6 +296,7 @@ def build_recommendations(
         "consolidation_breakout": [],
         "bottom_reversal": [],
         "bollinger_squeeze": [],
+        "intraday_ma60_touch": [],
         "lorentzian_ml": [],
     }
     for signal in signals:
@@ -328,6 +357,24 @@ def build_recommendations(
                     "rank": 0,
                     "recommendation_score": score,
                     "structure_risk_percent": observation_risk_percent,
+                    "reward_risk_ratio": None,
+                    "ranking_reasons": reasons,
+                }
+            )
+            continue
+        if strategy == "INTRADAY_MA60_TOUCH":
+            if level not in {"WATCH", "TRIAL", "CONFIRMED"}:
+                continue
+            result = _intraday_ma60_score(signal, metrics)
+            if result is None:
+                continue
+            score, distance_percent, reasons = result
+            grouped["intraday_ma60_touch"].append(
+                {
+                    **signal,
+                    "rank": 0,
+                    "recommendation_score": score,
+                    "structure_risk_percent": distance_percent,
                     "reward_risk_ratio": None,
                     "ranking_reasons": reasons,
                 }
