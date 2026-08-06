@@ -120,6 +120,7 @@ def recommendations(
             ranking_version=RECOMMENDATION_VERSION,
             pullback_resume=[],
             consolidation_breakout=[],
+            disposition_reversal=[],
             bottom_reversal=[],
             bollinger_squeeze=[],
             intraday_ma60_touch=[],
@@ -135,6 +136,7 @@ def recommendations(
                 [
                     "PULLBACK_RESUME",
                     "CONSOLIDATION_BREAKOUT",
+                    "DISPOSITION_REVERSAL",
                     "BOTTOM_REVERSAL",
                     "BOLLINGER_SQUEEZE",
                     "INTRADAY_MA60_TOUCH",
@@ -154,6 +156,7 @@ def recommendations(
         ranking_version=RECOMMENDATION_VERSION,
         pullback_resume=ranked["pullback_resume"],
         consolidation_breakout=ranked["consolidation_breakout"],
+        disposition_reversal=ranked["disposition_reversal"],
         bottom_reversal=ranked["bottom_reversal"],
         bollinger_squeeze=ranked["bollinger_squeeze"],
         intraday_ma60_touch=ranked["intraday_ma60_touch"],
@@ -203,7 +206,7 @@ def instrument_backtest(
         default="PULLBACK_RESUME",
         pattern=(
             "^(TREND_CONFIRMATION|PULLBACK_RESUME|"
-            "CONSOLIDATION_BREAKOUT|BOTTOM_REVERSAL|BOLLINGER_SQUEEZE|"
+            "CONSOLIDATION_BREAKOUT|DISPOSITION_REVERSAL|BOTTOM_REVERSAL|BOLLINGER_SQUEEZE|"
             "INTRADAY_MA60_TOUCH|LOW_PRICE_HIGH_YIELD|LORENTZIAN_ML)$"
         ),
     ),

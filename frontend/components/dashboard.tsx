@@ -27,6 +27,7 @@ const strategyLabel: Record<Signal["strategy"], string> = {
   TREND_CONFIRMATION: "多頭確認",
   PULLBACK_RESUME: "回後買上漲",
   CONSOLIDATION_BREAKOUT: "盤整突破",
+  DISPOSITION_REVERSAL: "處置反彈",
   BOTTOM_REVERSAL: "搶反彈",
   BOLLINGER_SQUEEZE: "布林收斂",
   INTRADAY_MA60_TOUCH: "60分K近60MA",
@@ -38,6 +39,7 @@ const strategyTabs = [
   ["ALL", "全部策略"],
   ["PULLBACK_RESUME", "回後買上漲"],
   ["CONSOLIDATION_BREAKOUT", "盤整突破"],
+  ["DISPOSITION_REVERSAL", "處置反彈"],
   ["BOTTOM_REVERSAL", "搶反彈"],
   ["BOLLINGER_SQUEEZE", "布林收斂"],
   ["INTRADAY_MA60_TOUCH", "60分K近60MA"],
@@ -100,6 +102,45 @@ function formatLots(signal: Signal) {
 }
 
 function TrendMetricsPanel({ signal }: { signal: Signal }) {
+  if (signal.strategy === "DISPOSITION_REVERSAL") {
+    const similarity = metricNumber(signal, "disposition_similarity_score");
+    const drawdown = metricNumber(signal, "drawdown_percent");
+    const limitLikeDays = metricNumber(signal, "limit_like_drop_days");
+    const deviation = metricNumber(signal, "deviation_rate_percent");
+    const stopVolumeRatio = metricNumber(signal, "stop_volume_ratio");
+    const daysToRelease = metricNumber(signal, "inferred_days_to_release");
+    const status = signal.metrics.inferred_disposition_status;
+    const items = [
+      ["相似度", similarity == null ? "—" : `${similarity.toFixed(0)}分`],
+      ["高點回落", drawdown == null ? "—" : `${drawdown.toFixed(1)}%`],
+      ["急跌日", limitLikeDays == null ? "—" : `${limitLikeDays.toFixed(0)}天`],
+      ["偏離20MA", deviation == null ? "—" : `${deviation.toFixed(1)}%`],
+      ["爆量倍數", stopVolumeRatio == null ? "—" : `${stopVolumeRatio.toFixed(2)}倍`],
+      ["推估狀態", typeof status === "string" ? status : "—"],
+      ["推估收斂", daysToRelease == null ? "—" : `約${daysToRelease.toFixed(0)}天`],
+      ["止跌K低點", formatPrice(metricNumber(signal, "previous_stop_low"))],
+    ];
+    return (
+      <div className="mt-4 rounded-xl border border-rose-400/20 bg-rose-400/5 p-3">
+        <div className="mb-3 text-xs font-bold tracking-wider text-rose-200">
+          處置反彈檢查
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {items.map(([label, value]) => (
+            <div key={label} className="rounded-lg bg-slate-950/35 p-2.5">
+              <div className="text-[10px] text-slate-500">{label}</div>
+              <div className="mt-1 text-sm font-semibold text-rose-100">
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 text-[11px] leading-5 text-rose-100/65">
+          目前為價量推估版；正式處置、出關日仍需以證交所／櫃買公告為準。
+        </div>
+      </div>
+    );
+  }
   if (signal.strategy === "LOW_PRICE_HIGH_YIELD") {
     const dividendYield = metricNumber(signal, "dividend_yield");
     const drawdown = metricNumber(signal, "drawdown_from_high_percent");
@@ -265,7 +306,7 @@ function RecommendationBoard({
   title: string;
   subtitle: string;
   items: RecommendationItem[];
-  accent: "emerald" | "cyan" | "amber" | "fuchsia" | "sky" | "lime" | "violet";
+  accent: "emerald" | "cyan" | "rose" | "amber" | "fuchsia" | "sky" | "lime" | "violet";
   onSelect: (item: RecommendationItem) => void;
 }) {
   const accentClass =
@@ -273,15 +314,17 @@ function RecommendationBoard({
       ? "text-emerald-300"
       : accent === "cyan"
         ? "text-cyan-300"
-        : accent === "amber"
-          ? "text-amber-300"
-          : accent === "fuchsia"
-            ? "text-fuchsia-300"
-            : accent === "sky"
-              ? "text-sky-300"
-              : accent === "lime"
-                ? "text-lime-300"
-                : "text-violet-300";
+        : accent === "rose"
+          ? "text-rose-300"
+          : accent === "amber"
+            ? "text-amber-300"
+            : accent === "fuchsia"
+              ? "text-fuchsia-300"
+              : accent === "sky"
+                ? "text-sky-300"
+                : accent === "lime"
+                  ? "text-lime-300"
+                  : "text-violet-300";
   return (
     <article className="overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900/70 backdrop-blur">
       <div className="border-b border-slate-800 px-4 py-3">
@@ -293,6 +336,11 @@ function RecommendationBoard({
           const volumeRatio = metricNumber(item, "volume_ratio");
           const drawdownPercent = metricNumber(item, "drawdown_percent");
           const stopVolumeRatio = metricNumber(item, "stop_volume_ratio");
+          const dispositionSimilarity = metricNumber(
+            item,
+            "disposition_similarity_score",
+          );
+          const dispositionDropDays = metricNumber(item, "limit_like_drop_days");
           const mlPrediction = metricNumber(item, "ml_prediction");
           const mlConfidence = metricNumber(item, "ml_confidence");
           const bollingerWidth = metricNumber(item, "bollinger_width_percent");
@@ -334,7 +382,9 @@ function RecommendationBoard({
                   <span>
                     {item.strategy === "PULLBACK_RESUME"
                       ? `${item.reward_risk_ratio?.toFixed(2) ?? "—"}R`
-                      : item.strategy === "BOTTOM_REVERSAL"
+                      : item.strategy === "DISPOSITION_REVERSAL"
+                        ? `相似 ${dispositionSimilarity?.toFixed(0) ?? "—"}分`
+                        : item.strategy === "BOTTOM_REVERSAL"
                         ? `跌幅 ${drawdownPercent?.toFixed(1) ?? "—"}%`
                         : item.strategy === "LORENTZIAN_ML"
                           ? `ML ${mlPrediction?.toFixed(0) ?? "—"}`
@@ -348,6 +398,12 @@ function RecommendationBoard({
                   </span>
                   {item.strategy === "BOTTOM_REVERSAL" && (
                     <span>爆量 {stopVolumeRatio?.toFixed(2) ?? "—"}倍</span>
+                  )}
+                  {item.strategy === "DISPOSITION_REVERSAL" && (
+                    <>
+                      <span>急跌 {dispositionDropDays?.toFixed(0) ?? "—"}天</span>
+                      <span>爆量 {stopVolumeRatio?.toFixed(2) ?? "—"}倍</span>
+                    </>
                   )}
                   {item.strategy === "LORENTZIAN_ML" && (
                     <span>
@@ -516,7 +572,7 @@ export function Dashboard() {
             台股起漲雷達
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            回後買上漲 × 盤整突破 × 搶反彈 × 布林收斂 × 60分K近60MA × 低檔高殖利率 × Lorentzian ML｜依公開教學原則量化
+            回後買上漲 × 盤整突破 × 處置反彈 × 搶反彈 × 布林收斂 × 60分K近60MA × 低檔高殖利率 × Lorentzian ML｜依公開教學原則量化
           </p>
         </div>
         <div className="text-left text-xs leading-6 text-slate-400 sm:text-right">
@@ -559,7 +615,7 @@ export function Dashboard() {
         ))}
       </section>
 
-      <section className="mb-5 grid gap-4 xl:grid-cols-7">
+      <section className="mb-5 grid gap-4 xl:grid-cols-8">
         <RecommendationBoard
           title="回後買上漲 Top 10"
           subtitle="確認優先｜風險 ≤ 8%｜前高空間 ≥ 1.5R"
@@ -572,6 +628,13 @@ export function Dashboard() {
           subtitle="確認優先｜風險 ≤ 8%｜量能與突破距離排序"
           items={recommendations?.consolidation_breakout ?? []}
           accent="cyan"
+          onSelect={selectRecommendation}
+        />
+        <RecommendationBoard
+          title="處置反彈 Top 10"
+          subtitle="疑似處置急跌｜爆量止跌｜突破止跌K高點"
+          items={recommendations?.disposition_reversal ?? []}
+          accent="rose"
           onSelect={selectRecommendation}
         />
         <RecommendationBoard

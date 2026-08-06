@@ -17,6 +17,13 @@ REVERSAL_SHARP_DROP_DAYS = 5
 REVERSAL_SHARP_DROP_PERCENT = 8.0
 REVERSAL_MIN_CONSECUTIVE_DOWN_DAYS = 3
 REVERSAL_VOLUME_MULTIPLE = 2.0
+DISPOSITION_LOOKBACK_DAYS = 30
+DISPOSITION_REVERSAL_LOOKBACK_DAYS = 20
+DISPOSITION_REVERSAL_MIN_DRAWDOWN_PERCENT = 25.0
+DISPOSITION_REVERSAL_MIN_5D_DROP_PERCENT = 18.0
+DISPOSITION_REVERSAL_MIN_10D_DROP_PERCENT = 28.0
+DISPOSITION_REVERSAL_LIMIT_LIKE_DROP_PERCENT = 8.5
+DISPOSITION_REVERSAL_VOLUME_MULTIPLE = 2.0
 LORENTZIAN_SOURCE = "close"
 LORENTZIAN_NEIGHBORS = 8
 LORENTZIAN_LOOKBACK_BARS = 2000
@@ -626,6 +633,242 @@ def _is_stopping_candle(bar: Bar) -> bool:
     doji = body <= candle_range * 0.2 and close_location >= 0.45
     bullish_reversal = bar.close > bar.open and close_location >= 0.55
     return long_lower_shadow or doji or bullish_reversal
+
+
+def _limit_like_drop_days(bars: Sequence[Bar]) -> int:
+    count = 0
+    for index in range(1, len(bars)):
+        previous = bars[index - 1]
+        current = bars[index]
+        if previous.close <= 0:
+            continue
+        close_drop = ((previous.close - current.close) / previous.close) * 100
+        intraday_drop = ((previous.close - current.low) / previous.close) * 100
+        if (
+            close_drop >= DISPOSITION_REVERSAL_LIMIT_LIKE_DROP_PERCENT
+            or intraday_drop >= DISPOSITION_REVERSAL_LIMIT_LIKE_DROP_PERCENT
+        ):
+            count += 1
+    return count
+
+
+def _disposition_similarity_score(
+    *,
+    drawdown_percent: float,
+    five_day_drop_percent: float,
+    ten_day_drop_percent: float,
+    consecutive_down_days: int,
+    limit_like_drop_days: int,
+    stop_volume_ratio: float,
+    stop_bar: Bar,
+    confirmed_buy: bool,
+) -> float:
+    candle_range = max(0.0, stop_bar.high - stop_bar.low)
+    lower_shadow_ratio = (
+        (min(stop_bar.open, stop_bar.close) - stop_bar.low) / candle_range
+        if candle_range > 0
+        else 0.0
+    )
+    score = 0.0
+    score += 22 * min(1.0, max(0.0, (drawdown_percent - 25.0) / 20.0))
+    score += 18 * min(1.0, max(five_day_drop_percent, ten_day_drop_percent) / 35.0)
+    score += 16 * min(1.0, consecutive_down_days / 4)
+    score += 14 * min(1.0, limit_like_drop_days / 3)
+    score += 16 * min(1.0, (stop_volume_ratio - 2.0) / 2.0)
+    score += 8 * min(1.0, max(0.0, lower_shadow_ratio) / 0.45)
+    score += 6 if confirmed_buy else 0
+    return round(min(100.0, score), 1)
+
+
+def disposition_reversal_signal(
+    bars: Sequence[Bar],
+) -> StrategySignal | None:
+    """Find disposal-stock style panic-to-rebound setups from daily OHLCV.
+
+    This is a price/volume proxy. Official TPEx/TWSE disposition公告 is not part
+    of the daily OHLCV snapshots yet, so metrics are labelled as inferred.
+    """
+    if len(bars) < MIN_BARS:
+        return None
+    latest = bars[-1]
+    previous = bars[-2]
+    pre_stop = bars[-3]
+    if min(latest.close, previous.high, previous.low, pre_stop.volume) <= 0:
+        return None
+
+    latest_confirms_previous = latest.close > previous.high and latest.close > latest.open
+    stop_bar = previous if latest_confirms_previous else latest
+    before_stop_bar = pre_stop if latest_confirms_previous else previous
+
+    lookback_window = bars[-DISPOSITION_REVERSAL_LOOKBACK_DAYS:]
+    if len(lookback_window) < DISPOSITION_REVERSAL_LOOKBACK_DAYS:
+        return None
+    recent_high = max(bar.high for bar in lookback_window)
+    recent_low = min(bar.low for bar in lookback_window)
+    recent_high_index = len(bars) - DISPOSITION_REVERSAL_LOOKBACK_DAYS + max(
+        range(len(lookback_window)),
+        key=lambda index: lookback_window[index].high,
+    )
+    recent_low_index = len(bars) - DISPOSITION_REVERSAL_LOOKBACK_DAYS + min(
+        range(len(lookback_window)),
+        key=lambda index: lookback_window[index].low,
+    )
+    if recent_high <= 0 or stop_bar.low <= 0:
+        return None
+
+    drawdown_percent = ((recent_high - stop_bar.low) / recent_high) * 100
+    five_day_start = bars[-6]
+    ten_day_start = bars[-11] if len(bars) >= 11 else bars[0]
+    five_day_drop_percent = (
+        ((five_day_start.close - stop_bar.low) / five_day_start.close) * 100
+        if five_day_start.close > 0
+        else 0.0
+    )
+    ten_day_drop_percent = (
+        ((ten_day_start.close - stop_bar.low) / ten_day_start.close) * 100
+        if ten_day_start.close > 0
+        else 0.0
+    )
+    decline_bars = bars[:-1] if latest_confirms_previous else bars
+    consecutive_down_days = _consecutive_down_days(decline_bars)
+    recent_disposition_window = decline_bars[-DISPOSITION_LOOKBACK_DAYS:]
+    limit_like_drop_days = _limit_like_drop_days(recent_disposition_window)
+    suspected_disposition_rhythm = (
+        consecutive_down_days >= REVERSAL_MIN_CONSECUTIVE_DOWN_DAYS
+        or limit_like_drop_days >= 2
+        or five_day_drop_percent >= DISPOSITION_REVERSAL_MIN_5D_DROP_PERCENT
+        or ten_day_drop_percent >= DISPOSITION_REVERSAL_MIN_10D_DROP_PERCENT
+    )
+    severe_decline = (
+        drawdown_percent >= DISPOSITION_REVERSAL_MIN_DRAWDOWN_PERCENT
+        and suspected_disposition_rhythm
+    )
+
+    stop_volume_ratio = float(stop_bar.volume) / float(before_stop_bar.volume)
+    stop_volume_confirmed = stop_volume_ratio >= DISPOSITION_REVERSAL_VOLUME_MULTIPLE
+    stop_candle_confirmed = _is_stopping_candle(stop_bar)
+    low_zone = stop_bar.low <= recent_low * 1.03
+    stop_signal_confirmed = (
+        severe_decline
+        and low_zone
+        and stop_volume_confirmed
+        and stop_candle_confirmed
+        and stop_bar.volume >= MIN_TRADE_VOLUME_SHARES
+    )
+    if not stop_signal_confirmed:
+        return None
+
+    context = _range_context(
+        bars,
+        range_high=recent_high,
+        range_low=stop_bar.low,
+        range_high_index=recent_high_index,
+        range_low_index=recent_low_index,
+    )
+    if context is None:
+        return None
+
+    confirmed_buy = (
+        latest_confirms_previous
+        and latest.close > latest.open
+        and latest.volume >= MIN_TRADE_VOLUME_SHARES
+    )
+    ma20_value = float(sma([bar.close for bar in bars], 20)[-1] or 0.0)
+    deviation_rate = ((stop_bar.close - ma20_value) / ma20_value) * 100 if ma20_value > 0 else 0.0
+    similarity_score = _disposition_similarity_score(
+        drawdown_percent=drawdown_percent,
+        five_day_drop_percent=five_day_drop_percent,
+        ten_day_drop_percent=ten_day_drop_percent,
+        consecutive_down_days=consecutive_down_days,
+        limit_like_drop_days=limit_like_drop_days,
+        stop_volume_ratio=stop_volume_ratio,
+        stop_bar=stop_bar,
+        confirmed_buy=confirmed_buy,
+    )
+    inferred_days_to_release = max(0, 10 - min(10, limit_like_drop_days + 2))
+    inferred_disposition_status = (
+        "疑似處置急跌後止跌"
+        if limit_like_drop_days >= 2
+        else "急跌止跌觀察"
+    )
+
+    if confirmed_buy:
+        level = SignalLevel.CONFIRMED
+        timing_status = "READY"
+        timing_note = (
+            "疑似處置股急跌後出現爆量止跌K，今日上漲收盤突破止跌K高點；"
+            "屬高波動反彈確認點，跌破止跌K低點需出場。"
+        )
+        trigger_price = stop_bar.high
+        score = int(min(96, 80 + similarity_score * 0.16))
+    else:
+        level = SignalLevel.WATCH
+        timing_status = "WAIT_CONFIRMATION"
+        timing_note = (
+            "疑似處置股急跌後已出現爆量止跌K；先觀察，等下一根上漲收盤突破"
+            "止跌K高點才確認，不提前追高。"
+        )
+        trigger_price = stop_bar.high
+        score = int(min(84, 66 + similarity_score * 0.18))
+
+    risk_percent, risk_valid = _risk(latest.close, stop_bar.low)
+    signal = _signal(
+        strategy="DISPOSITION_REVERSAL",
+        level=level,
+        bars=bars,
+        context=context,
+        score=score,
+        trigger_price=trigger_price,
+        timing_status=timing_status,
+        timing_note=timing_note,
+        reasons=[
+            f"近{DISPOSITION_REVERSAL_LOOKBACK_DAYS}日高點回落 {drawdown_percent:.1f}%，符合處置股急跌後型態",
+            f"近5日跌幅 {five_day_drop_percent:.1f}%、近10日跌幅 {ten_day_drop_percent:.1f}%",
+            f"近{DISPOSITION_LOOKBACK_DAYS}日疑似跌停/急跌日 {limit_like_drop_days} 天",
+            f"止跌K成交量為前一日 {stop_volume_ratio:.2f} 倍，成交 {stop_bar.volume / 1000:.0f} 張",
+            f"中探針型態相似度 {similarity_score:.0f} 分，偏離20MA {deviation_rate:.1f}%",
+            (
+                "上漲收盤突破止跌K高點，處置反彈確認"
+                if confirmed_buy
+                else "等待上漲收盤突破止跌K高點"
+            ),
+            "此分類為價量推估版，正式處置天數仍需以證交所/櫃買公告為準",
+        ],
+        extra_metrics={
+            "latest_volume_lots": latest.volume / 1000,
+            "stop_volume_lots": stop_bar.volume / 1000,
+            "minimum_volume_lots": MIN_TRADE_VOLUME_LOTS,
+            "drawdown_percent": drawdown_percent,
+            "five_day_drop_percent": five_day_drop_percent,
+            "ten_day_drop_percent": ten_day_drop_percent,
+            "consecutive_down_days": float(consecutive_down_days),
+            "limit_like_drop_days": float(limit_like_drop_days),
+            "suspected_disposition_rhythm": suspected_disposition_rhythm,
+            "inferred_disposition_status": inferred_disposition_status,
+            "inferred_days_to_release": float(inferred_days_to_release),
+            "stop_volume_ratio": stop_volume_ratio,
+            "stop_volume_confirmed": stop_volume_confirmed,
+            "stop_candle_confirmed": stop_candle_confirmed,
+            "low_zone": low_zone,
+            "previous_stop_high": stop_bar.high,
+            "previous_stop_low": stop_bar.low,
+            "confirmed_buy": confirmed_buy,
+            "disposition_similarity_score": similarity_score,
+            "deviation_rate_percent": deviation_rate,
+            "ma20": ma20_value,
+            "official_disposition_data_available": False,
+            "structure_risk_percent": risk_percent,
+            "structure_risk_valid": risk_valid,
+        },
+    )
+    return StrategySignal(
+        **{
+            **signal.__dict__,
+            "stop_price": round(stop_bar.low, 2),
+            "risk_percent": risk_percent if confirmed_buy else None,
+            "executable": confirmed_buy and risk_valid,
+        }
+    )
 
 
 def bottom_reversal_signal(
@@ -1746,6 +1989,7 @@ def scan_bars(
         trend_confirmation_signal(bars),
         pullback_resume_signal(bars),
         consolidation_signal(bars),
+        disposition_reversal_signal(bars),
         bottom_reversal_signal(bars),
         bollinger_squeeze_signal(bars),
         lorentzian_ml_signal(bars, relative_strength_percentile),

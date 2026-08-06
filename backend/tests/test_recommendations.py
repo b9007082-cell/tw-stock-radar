@@ -176,6 +176,50 @@ def test_bottom_reversal_ranks_by_deeper_drop_and_volume() -> None:
     assert items[0]["structure_risk_percent"] == 4.0
 
 
+def test_disposition_reversal_has_independent_ranking_bucket() -> None:
+    mild = _signal(
+        "3501",
+        "DISPOSITION_REVERSAL",
+        level="WATCH",
+        close=100,
+        stop=92,
+        extra_metrics={
+            "drawdown_percent": 28.0,
+            "disposition_similarity_score": 48.0,
+            "stop_volume_ratio": 2.2,
+            "previous_stop_low": 92,
+            "limit_like_drop_days": 2,
+            "deviation_rate_percent": -16.0,
+            "latest_volume_lots": 2500,
+            "confirmed_buy": False,
+            "inferred_disposition_status": "急跌止跌觀察",
+        },
+    )
+    strong = _signal(
+        "3502",
+        "DISPOSITION_REVERSAL",
+        level="CONFIRMED",
+        close=122,
+        stop=111,
+        extra_metrics={
+            "drawdown_percent": 44.0,
+            "disposition_similarity_score": 82.0,
+            "stop_volume_ratio": 5.8,
+            "previous_stop_low": 111,
+            "limit_like_drop_days": 4,
+            "deviation_rate_percent": -28.0,
+            "latest_volume_lots": 3600,
+            "confirmed_buy": True,
+            "inferred_disposition_status": "疑似處置急跌後止跌",
+        },
+    )
+    result = build_recommendations([mild, strong])
+    items = result["disposition_reversal"]
+    assert [item["symbol"] for item in items] == ["3502", "3501"]
+    assert "相似度 82分" in items[0]["ranking_reasons"]
+    assert items[0]["structure_risk_percent"] == 9.02
+
+
 def test_lorentzian_ml_has_independent_ranking_bucket() -> None:
     mild = _signal(
         "4001",

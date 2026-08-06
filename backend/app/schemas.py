@@ -42,6 +42,7 @@ class RecommendationsResponse(BaseModel):
     ranking_version: str
     pullback_resume: list[RecommendationItemResponse]
     consolidation_breakout: list[RecommendationItemResponse]
+    disposition_reversal: list[RecommendationItemResponse]
     bottom_reversal: list[RecommendationItemResponse]
     bollinger_squeeze: list[RecommendationItemResponse]
     intraday_ma60_touch: list[RecommendationItemResponse]

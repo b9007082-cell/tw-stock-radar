@@ -6,6 +6,7 @@ from app.services.strategies import (
     bollinger_squeeze_signal,
     bottom_reversal_signal,
     consolidation_signal,
+    disposition_reversal_signal,
     intraday_ma60_touch_signal,
     low_price_high_yield_signal,
     lorentzian_ml_signal,
@@ -149,6 +150,40 @@ def _bottom_reversal_confirmed_bars() -> list[Bar]:
         close=100,
         volume=3_200_000,
         turnover=90_000_000,
+    )
+    bars.append(confirm)
+    return bars
+
+
+def _disposition_reversal_watch_bars() -> list[Bar]:
+    bars: list[Bar] = []
+    for index in range(65):
+        bars.append(_bar(index, 180 - index * 0.2, 2_500_000))
+    for close in (160, 145, 131, 118):
+        bars.append(_bar(len(bars), close, 400_000))
+    stop = Bar(
+        date=date(2026, 1, 1) + timedelta(days=len(bars)),
+        open=105,
+        high=111.5,
+        low=93.6,
+        close=111,
+        volume=3_200_000,
+        turnover=350_000_000,
+    )
+    bars.append(stop)
+    return bars
+
+
+def _disposition_reversal_confirmed_bars() -> list[Bar]:
+    bars = _disposition_reversal_watch_bars()
+    confirm = Bar(
+        date=date(2026, 1, 1) + timedelta(days=len(bars)),
+        open=112,
+        high=123,
+        low=111,
+        close=122,
+        volume=3_000_000,
+        turnover=360_000_000,
     )
     bars.append(confirm)
     return bars
@@ -384,6 +419,25 @@ def test_bottom_reversal_rejects_without_double_volume() -> None:
     assert bottom_reversal_signal(bars) is None
 
 
+def test_disposition_reversal_finds_disposal_like_panic_stop() -> None:
+    signal = disposition_reversal_signal(_disposition_reversal_watch_bars())
+    assert signal is not None
+    assert signal.strategy == "DISPOSITION_REVERSAL"
+    assert signal.level == SignalLevel.WATCH
+    assert signal.metrics["drawdown_percent"] >= 25
+    assert signal.metrics["limit_like_drop_days"] >= 2
+    assert signal.metrics["disposition_similarity_score"] > 40
+
+
+def test_disposition_reversal_confirms_after_stop_high_break() -> None:
+    signal = disposition_reversal_signal(_disposition_reversal_confirmed_bars())
+    assert signal is not None
+    assert signal.level == SignalLevel.CONFIRMED
+    assert signal.trigger_price == 111.5
+    assert signal.stop_price == 93.6
+    assert signal.metrics["confirmed_buy"] is True
+
+
 def test_lorentzian_ml_finds_positive_daily_classifier_signal() -> None:
     signal = lorentzian_ml_signal(_lorentzian_bars(), 0.8)
     assert signal is not None
@@ -466,3 +520,11 @@ def test_scan_keeps_direction_and_buy_point_signals() -> None:
 def test_scan_includes_bollinger_squeeze() -> None:
     strategies = {signal.strategy for signal in scan_bars(_bollinger_squeeze_bars())}
     assert "BOLLINGER_SQUEEZE" in strategies
+
+
+def test_scan_includes_disposition_reversal() -> None:
+    strategies = {
+        signal.strategy
+        for signal in scan_bars(_disposition_reversal_confirmed_bars())
+    }
+    assert "DISPOSITION_REVERSAL" in strategies

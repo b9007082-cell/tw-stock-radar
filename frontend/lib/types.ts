@@ -27,6 +27,7 @@ export interface Signal {
     | "TREND_CONFIRMATION"
     | "PULLBACK_RESUME"
     | "CONSOLIDATION_BREAKOUT"
+    | "DISPOSITION_REVERSAL"
     | "BOTTOM_REVERSAL"
     | "BOLLINGER_SQUEEZE"
     | "INTRADAY_MA60_TOUCH"
@@ -64,6 +65,7 @@ export interface DailyRecommendations {
   ranking_version: string;
   pullback_resume: RecommendationItem[];
   consolidation_breakout: RecommendationItem[];
+  disposition_reversal: RecommendationItem[];
   bottom_reversal: RecommendationItem[];
   bollinger_squeeze: RecommendationItem[];
   intraday_ma60_touch: RecommendationItem[];

@@ -5,7 +5,7 @@ from typing import Any
 
 
 RECOMMENDATION_LIMIT = 10
-RECOMMENDATION_VERSION = "2026.08.r10"
+RECOMMENDATION_VERSION = "2026.08.r11"
 MAX_STRUCTURE_RISK_PERCENT = 8.0
 MIN_PULLBACK_REWARD_RISK = 1.5
 MAX_LORENTZIAN_RISK_PERCENT = 10.0
@@ -168,6 +168,62 @@ def _bottom_reversal_score(
     return round(score, 1), reasons
 
 
+def _disposition_reversal_score(
+    signal: Mapping[str, Any],
+    metrics: Mapping[str, Any],
+) -> tuple[float, float, list[str]] | None:
+    close = _number(signal.get("close"))
+    stop_low = _number(metrics.get("previous_stop_low"))
+    drawdown = _number(metrics.get("drawdown_percent"))
+    similarity = _number(metrics.get("disposition_similarity_score"))
+    volume_ratio = _number(metrics.get("stop_volume_ratio"))
+    limit_like_days = _number(metrics.get("limit_like_drop_days")) or 0.0
+    deviation = _number(metrics.get("deviation_rate_percent")) or 0.0
+    if (
+        close is None
+        or stop_low is None
+        or drawdown is None
+        or similarity is None
+        or volume_ratio is None
+        or close <= stop_low
+    ):
+        return None
+    risk_percent = ((close - stop_low) / close) * 100
+    if risk_percent <= 0:
+        return None
+    similarity_score = 32 * _clamp(similarity / 100.0)
+    drawdown_score = 22 * _clamp((drawdown - 25.0) / 25.0)
+    disposition_score = 16 * _clamp(limit_like_days / 4.0)
+    volume_score = 16 * _clamp((volume_ratio - 2.0) / 2.0)
+    deviation_score = 8 * _clamp(abs(min(0.0, deviation)) / 30.0)
+    confirmation_score = 6 if metrics.get("confirmed_buy") is True else 2
+    risk_penalty = 8 * _clamp(max(0.0, risk_percent - 12.0) / 18.0)
+    score = (
+        similarity_score
+        + drawdown_score
+        + disposition_score
+        + volume_score
+        + deviation_score
+        + confirmation_score
+        - risk_penalty
+    )
+    reasons = [
+        f"相似度 {similarity:.0f}分",
+        f"跌幅 {drawdown:.1f}%",
+        f"急跌日 {limit_like_days:.0f}天",
+        f"爆量 {volume_ratio:.2f}倍",
+        f"止跌K風險 {risk_percent:.2f}%",
+        "突破止跌K高點" if metrics.get("confirmed_buy") is True else "等待突破止跌K高點",
+    ]
+    status = metrics.get("inferred_disposition_status")
+    if isinstance(status, str):
+        reasons.append(status)
+    latest_volume_lots = _number(metrics.get("latest_volume_lots"))
+    if latest_volume_lots is not None:
+        reasons.append(f"成交 {latest_volume_lots:.0f}張")
+    return round(score, 1), round(risk_percent, 2), reasons
+
+
 def _lorentzian_score(
     signal: Mapping[str, Any],
     metrics: Mapping[str, Any],
@@ -326,6 +382,7 @@ def build_recommendations(
     grouped: dict[str, list[dict[str, Any]]] = {
         "pullback_resume": [],
         "consolidation_breakout": [],
+        "disposition_reversal": [],
         "bottom_reversal": [],
         "bollinger_squeeze": [],
         "intraday_ma60_touch": [],
@@ -408,6 +465,24 @@ def build_recommendations(
                     "rank": 0,
                     "recommendation_score": score,
                     "structure_risk_percent": distance_percent,
+                    "reward_risk_ratio": None,
+                    "ranking_reasons": reasons,
+                }
+            )
+            continue
+        if strategy == "DISPOSITION_REVERSAL":
+            if level not in {"WATCH", "CONFIRMED"}:
+                continue
+            result = _disposition_reversal_score(signal, metrics)
+            if result is None:
+                continue
+            score, risk_percent, reasons = result
+            grouped["disposition_reversal"].append(
+                {
+                    **signal,
+                    "rank": 0,
+                    "recommendation_score": score,
+                    "structure_risk_percent": risk_percent,
                     "reward_risk_ratio": None,
                     "ranking_reasons": reasons,
                 }

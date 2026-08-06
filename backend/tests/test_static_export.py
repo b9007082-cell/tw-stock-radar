@@ -80,10 +80,11 @@ def test_static_export_produces_deterministic_contract(tmp_path) -> None:
     assert summary["valuation_available"] == 0
     assert isinstance(signals, list)
     assert recommendations["as_of"] == latest_date.isoformat()
-    assert recommendations["ranking_version"] == "2026.08.r10"
+    assert recommendations["ranking_version"] == "2026.08.r11"
     assert "recommendations.json" in first["checksums"]
     assert isinstance(recommendations["pullback_resume"], list)
     assert isinstance(recommendations["consolidation_breakout"], list)
+    assert isinstance(recommendations["disposition_reversal"], list)
     assert isinstance(recommendations["bottom_reversal"], list)
     assert isinstance(recommendations["bollinger_squeeze"], list)
     assert isinstance(recommendations["intraday_ma60_touch"], list)
