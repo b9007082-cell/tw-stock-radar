@@ -1,16 +1,16 @@
 {
-  "as_of": "2026-08-05",
+  "as_of": "2026-08-06",
   "confirmed": 14,
-  "instruments": 746,
+  "instruments": 743,
   "intraday_available": 300,
   "intraday_errors": 0,
   "intraday_scanned": 300,
   "strategy_approved": false,
   "strategy_version": "2026.08.v20",
-  "total_signals": 130,
-  "trial": 52,
-  "valuation_available": 1736,
-  "valuation_errors": 0,
-  "valuation_matched": 675,
-  "watch": 64
+  "total_signals": 113,
+  "trial": 34,
+  "valuation_available": 0,
+  "valuation_errors": 1,
+  "valuation_matched": 0,
+  "watch": 65
 }
