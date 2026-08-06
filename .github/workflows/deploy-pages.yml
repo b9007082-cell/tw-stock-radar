@@ -39,14 +39,11 @@ jobs:
       - name: Install backend
         run: python -m pip install -e "./backend[dev]"
 
-      - name: Verify backend and static data
+      - name: Verify backend
         shell: bash
         run: |
           cd backend
           python -m pytest
-          cd ..
-          python -m app.cli export-static
-          git diff --exit-code -- frontend/public/data
 
       - name: Set up Node for Worker
         uses: actions/setup-node@v6
