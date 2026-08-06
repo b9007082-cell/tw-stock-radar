@@ -7,10 +7,10 @@
   "intraday_scanned": 300,
   "strategy_approved": false,
   "strategy_version": "2026.08.v20",
-  "total_signals": 113,
-  "trial": 34,
-  "valuation_available": 0,
-  "valuation_errors": 1,
-  "valuation_matched": 0,
-  "watch": 65
+  "total_signals": 134,
+  "trial": 44,
+  "valuation_available": 1736,
+  "valuation_errors": 0,
+  "valuation_matched": 673,
+  "watch": 76
 }
