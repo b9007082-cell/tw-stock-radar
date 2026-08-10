@@ -1857,7 +1857,8 @@ def intraday_ma60_touch_signal(
     daily_ma20_rising = daily_ma20_slope_percent > 0
     daily_ma60_rising = daily_ma60_slope_percent > 0
     daily_ma20_ma60_rising = daily_ma20_rising and daily_ma60_rising
-    if not daily_ma20_ma60_rising:
+    daily_bullish_alignment = daily_ma5 > daily_ma10 > daily_ma20
+    if not daily_bullish_alignment:
         return None
 
     closes = [bar.close for bar in intraday_bars]
@@ -1930,7 +1931,7 @@ def intraday_ma60_touch_signal(
         level = SignalLevel.CONFIRMED
         timing_status = "READY"
         timing_note = (
-            "6060戰法確認：日線20MA與60MA向上，60分K的60MA拐頭向上，"
+            "6060戰法確認：日線均線多頭排列，60分K的60MA向上，"
             "MACD位於零軸上，且60分K放量站上或回踩不破60MA。"
         )
         score = 90
@@ -1938,7 +1939,7 @@ def intraday_ma60_touch_signal(
         level = SignalLevel.TRIAL
         timing_status = "TRIAL_ENTRY"
         timing_note = (
-            "6060戰法轉強：日線20MA與60MA向上、60分60MA上彎、MACD零軸上，"
+            "6060戰法轉強：日線均線多頭排列、60分60MA向上、MACD零軸上，"
             "但尚未同時滿足放量突破與收盤確認。"
         )
         score = 80
@@ -1946,7 +1947,7 @@ def intraday_ma60_touch_signal(
         level = SignalLevel.WATCH
         timing_status = "WAIT_CONFIRMATION"
         timing_note = (
-            "6060戰法觀察：大方向已符合，等待60分K放量突破60MA，"
+            "6060戰法觀察：日線均線多頭排列且60分60MA向上，等待60分K放量突破60MA，"
             "或回踩60MA不破後轉強。"
         )
         score = 70
@@ -1963,10 +1964,7 @@ def intraday_ma60_touch_signal(
         timing_status=timing_status,
         timing_note=timing_note,
         reasons=[
-            (
-                f"日線20MA/60MA向上：20MA {daily_ma20_slope_percent:+.2f}%，"
-                f"60MA {daily_ma60_slope_percent:+.2f}%"
-            ),
+            f"日線均線多頭排列：5MA {daily_ma5:.2f} > 10MA {daily_ma10:.2f} > 20MA {daily_ma20:.2f}",
             f"60分K收盤 {latest.close:.2f}，距60MA {distance_percent:+.2f}%",
             f"60分60MA {latest_ma60:.2f}，近5根斜率 {ma60_slope_percent:+.2f}%",
             f"60分MACD {float(macd['macd_line']):+.3f}，位於零軸上",
@@ -2016,7 +2014,7 @@ def intraday_ma60_touch_signal(
             "daily_ma20_rising": daily_ma20_rising,
             "daily_ma60_rising": daily_ma60_rising,
             "daily_ma20_ma60_rising": daily_ma20_ma60_rising,
-            "daily_bullish_alignment": daily_ma20_ma60_rising,
+            "daily_bullish_alignment": daily_bullish_alignment,
             "reclaimed_intraday_ma60": reclaimed_ma60,
             "above_intraday_ma60": above_ma60,
             "pulled_back_without_breaking_intraday_ma60": pulled_back_without_breaking,

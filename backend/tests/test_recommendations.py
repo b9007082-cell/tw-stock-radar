@@ -328,7 +328,6 @@ def test_intraday_ma60_touch_has_independent_ranking_bucket() -> None:
             "intraday_distance_to_ma60_percent": -1.4,
             "intraday_ma60": 101.4,
             "intraday_ma60_slope_percent": 0.05,
-            "daily_ma20_ma60_rising": True,
             "daily_ma20_slope_percent": 0.03,
             "daily_ma60_slope_percent": 0.02,
             "daily_bullish_alignment": True,
@@ -352,7 +351,6 @@ def test_intraday_ma60_touch_has_independent_ranking_bucket() -> None:
             "intraday_distance_to_ma60_percent": 0.2,
             "intraday_ma60": 99.8,
             "intraday_ma60_slope_percent": 0.25,
-            "daily_ma20_ma60_rising": True,
             "daily_ma20_slope_percent": 0.08,
             "daily_ma60_slope_percent": 0.05,
             "daily_bullish_alignment": True,
@@ -370,7 +368,7 @@ def test_intraday_ma60_touch_has_independent_ranking_bucket() -> None:
     items = result["intraday_ma60_touch"]
     assert [item["symbol"] for item in items] == ["6002", "6001"]
     assert "距60分MA60 +0.20%" in items[0]["ranking_reasons"]
-    assert "日線20MA/60MA向上 +0.08%/+0.05%" in items[0]["ranking_reasons"]
+    assert "日線均線多頭排列" in items[0]["ranking_reasons"]
     assert items[0]["structure_risk_percent"] == 0.2
 
 

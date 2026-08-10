@@ -353,10 +353,7 @@ def _intraday_ma60_score(
     volume_lots = _number(metrics.get("daily_volume_lots"))
     intraday_volume_ratio = _number(metrics.get("intraday_volume_ratio")) or 0.0
     macd_line = _number(metrics.get("intraday_macd_line")) or 0.0
-    daily_ma20_ma60_rising = (
-        metrics.get("daily_ma20_ma60_rising") is True
-        or metrics.get("daily_bullish_alignment") is True
-    )
+    daily_bullish_alignment = metrics.get("daily_bullish_alignment") is True
     daily_ma20_slope = _number(metrics.get("daily_ma20_slope_percent")) or 0.0
     daily_ma60_slope = _number(metrics.get("daily_ma60_slope_percent")) or 0.0
     ma60_turning_up = metrics.get("intraday_ma60_turning_up") is True
@@ -366,7 +363,7 @@ def _intraday_ma60_score(
     pullback_hold = metrics.get("pulled_back_without_breaking_intraday_ma60") is True
     if distance is None or signed_distance is None or ma60 is None or close is None:
         return None
-    if not (daily_ma20_ma60_rising and ma60_turning_up and macd_above_zero):
+    if not (daily_bullish_alignment and ma60_turning_up and macd_above_zero):
         return None
     distance_score = 28 * _clamp((1.5 - distance) / 1.5)
     slope_score = 22 * _clamp(slope / 0.8)
@@ -387,7 +384,7 @@ def _intraday_ma60_score(
         + confirmation_score
     )
     reasons = [
-        f"日線20MA/60MA向上 {daily_ma20_slope:+.2f}%/{daily_ma60_slope:+.2f}%",
+        "日線均線多頭排列",
         f"距60分MA60 {signed_distance:+.2f}%",
         f"60MA上彎 {slope:+.2f}%",
         f"MACD {macd_line:+.3f}",
