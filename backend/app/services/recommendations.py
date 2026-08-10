@@ -352,42 +352,33 @@ def _intraday_ma60_score(
     close = _number(metrics.get("intraday_close")) or _number(signal.get("close"))
     volume_lots = _number(metrics.get("daily_volume_lots"))
     intraday_volume_ratio = _number(metrics.get("intraday_volume_ratio")) or 0.0
-    macd_line = _number(metrics.get("intraday_macd_line")) or 0.0
-    daily_bullish_alignment = metrics.get("daily_bullish_alignment") is True
-    daily_ma20_slope = _number(metrics.get("daily_ma20_slope_percent")) or 0.0
-    daily_ma60_slope = _number(metrics.get("daily_ma60_slope_percent")) or 0.0
     ma60_turning_up = metrics.get("intraday_ma60_turning_up") is True
-    macd_above_zero = metrics.get("intraday_macd_above_zero") is True
     volume_breakout = metrics.get("intraday_volume_breakout") is True
     reclaimed = metrics.get("reclaimed_intraday_ma60") is True
     pullback_hold = metrics.get("pulled_back_without_breaking_intraday_ma60") is True
     if distance is None or signed_distance is None or ma60 is None or close is None:
         return None
-    if not (daily_bullish_alignment and ma60_turning_up and macd_above_zero):
+    if not ma60_turning_up:
         return None
-    distance_score = 28 * _clamp((1.5 - distance) / 1.5)
-    slope_score = 22 * _clamp(slope / 0.8)
-    macd_score = 16 * _clamp(macd_line / max(close * 0.01, 0.01))
-    setup_score = 18 if reclaimed else 14 if pullback_hold else 8 if signed_distance >= 0 else 2
+    distance_score = 34 * _clamp((1.5 - distance) / 1.5)
+    slope_score = 24 * _clamp(slope / 0.8)
+    setup_score = 20 if reclaimed else 16 if pullback_hold else 10 if signed_distance >= 0 else 4
     volume_score = (
-        10 * _clamp((intraday_volume_ratio - 1.0) / 1.0)
+        14 * _clamp((intraday_volume_ratio - 1.0) / 1.0)
         if intraday_volume_ratio > 0
-        else 6 * _clamp(((volume_lots or 0.0) - 2000) / 8000)
+        else 8 * _clamp(((volume_lots or 0.0) - 2000) / 8000)
     )
-    confirmation_score = 6 if volume_breakout else 0
+    confirmation_score = 8 if volume_breakout else 0
     score = (
         distance_score
         + slope_score
-        + macd_score
         + setup_score
         + volume_score
         + confirmation_score
     )
     reasons = [
-        "日線均線多頭排列",
         f"距60分MA60 {signed_distance:+.2f}%",
         f"60MA上彎 {slope:+.2f}%",
-        f"MACD {macd_line:+.3f}",
         "放量突破60MA"
         if reclaimed and volume_breakout
         else "回踩60MA不破"

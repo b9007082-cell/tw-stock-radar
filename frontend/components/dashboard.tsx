@@ -178,34 +178,21 @@ function TrendMetricsPanel({ signal }: { signal: Signal }) {
     const distance = metricNumber(signal, "intraday_distance_to_ma60_percent");
     const ma60 = metricNumber(signal, "intraday_ma60");
     const slope = metricNumber(signal, "intraday_ma60_slope_percent");
-    const macd = metricNumber(signal, "intraday_macd_line");
     const volumeRatio = metricNumber(signal, "intraday_volume_ratio");
-    const dailyMa5 = metricNumber(signal, "daily_ma5");
-    const dailyMa10 = metricNumber(signal, "daily_ma10");
-    const dailyMa20 = metricNumber(signal, "daily_ma20");
-    const dailyMa60 = metricNumber(signal, "daily_ma60");
-    const dailyBullishAlignment = signal.metrics.daily_bullish_alignment;
+    const dailyVolumeLots = metricNumber(signal, "daily_volume_lots");
     const volumeBreakout = signal.metrics.intraday_volume_breakout;
     const barTime = signal.metrics.intraday_bar_time;
     const items = [
-      [
-        "日線多頭排列",
-        dailyBullishAlignment === true
-          ? "符合"
-          : dailyMa5 && dailyMa10 && dailyMa20 && dailyMa60
-            ? `5MA ${dailyMa5.toFixed(1)} / 10MA ${dailyMa10.toFixed(1)} / 20MA ${dailyMa20.toFixed(1)}`
-          : "—",
-      ],
       ["60分MA60", formatPrice(ma60)],
       ["距60MA", distance == null ? "—" : `${distance.toFixed(2)}%`],
       ["60MA上彎", slope == null ? "—" : `${slope.toFixed(2)}%`],
-      ["MACD零軸", macd == null ? "—" : `${macd.toFixed(3)}`],
       [
         "60分量比",
         volumeRatio == null || volumeRatio === 0
           ? "資料不足"
           : `${volumeRatio.toFixed(2)}倍`,
       ],
+      ["日成交張數", dailyVolumeLots == null ? "—" : `${dailyVolumeLots.toFixed(0)}張`],
       ["進場訊號", volumeBreakout ? "放量突破/確認" : "等待放量"],
       ["資料時間", typeof barTime === "string" ? barTime.slice(5, 16) : "—"],
     ];
@@ -686,7 +673,7 @@ export function Dashboard() {
         />
         <RecommendationBoard
           title="6060戰法 Top 10"
-          subtitle="日線多頭排列｜60分60MA向上｜MACD零軸上｜放量突破"
+          subtitle="60分K貼近60MA｜60MA向上｜放量站上或回踩不破"
           items={recommendations?.intraday_ma60_touch ?? []}
           accent="sky"
           onSelect={selectRecommendation}

@@ -507,20 +507,13 @@ def test_intraday_ma60_touch_finds_hourly_ma_support() -> None:
     assert signal.level in {SignalLevel.TRIAL, SignalLevel.CONFIRMED}
     assert signal.metrics["timeframe"] == "60m"
     assert signal.metrics["strategy_rule"] == "6060"
-    assert signal.metrics["daily_bullish_alignment"] is True
     assert signal.metrics["intraday_ma60_turning_up"] is True
-    assert signal.metrics["intraday_macd_above_zero"] is True
     assert signal.metrics["intraday_abs_distance_to_ma60_percent"] <= 1.5
     assert signal.metrics["intraday_volume_breakout"] is True
     assert signal.metrics["daily_volume_lots"] >= 2000
 
 
-def test_intraday_ma60_touch_rejects_non_bullish_daily_alignment() -> None:
-    daily = [_bar(index, 100 - index * 0.2) for index in range(65)]
-    assert intraday_ma60_touch_signal(daily, _intraday_ma60_bars()) is None
-
-
-def test_intraday_ma60_touch_rejects_intraday_macd_below_zero() -> None:
+def test_intraday_ma60_touch_rejects_intraday_ma60_not_rising() -> None:
     assert (
         intraday_ma60_touch_signal(
             _uptrend_base(),
