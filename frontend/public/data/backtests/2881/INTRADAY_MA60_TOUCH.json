@@ -10,7 +10,7 @@
   "profit_factor": 0.0,
   "sharpe_like": 0.0,
   "strategy": "INTRADAY_MA60_TOUCH",
-  "strategy_version": "2026.08.v22",
+  "strategy_version": "2026.08.v23",
   "symbol": "2881",
   "total_return": 0.0,
   "trades": 0,

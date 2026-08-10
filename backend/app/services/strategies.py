@@ -9,6 +9,7 @@ from app.services.indicators import confirmed_swings, percent_change, sma
 MIN_BARS = 65
 BREAKOUT_VOLUME_MULTIPLE = 1.2
 MAX_VOLUME_CONTRACTION_RATIO = 1.0
+PULLBACK_REBOUND_WATCH_VOLUME_RATIO = 0.85
 MIN_TRADE_VOLUME_SHARES = 2_000_000
 MIN_TRADE_VOLUME_LOTS = MIN_TRADE_VOLUME_SHARES / 1000
 REVERSAL_LOOKBACK_DAYS = 20
@@ -422,6 +423,9 @@ def pullback_resume_signal(
         float(latest.volume) / pullback_volume_avg if pullback_volume_avg else 0.0
     )
     rebound_volume_expanding = rebound_volume_ratio > 1.0
+    rebound_volume_watch_ok = (
+        rebound_volume_ratio >= PULLBACK_REBOUND_WATCH_VOLUME_RATIO
+    )
     if not pullback_volume_contracting:
         return None
 
@@ -432,24 +436,33 @@ def pullback_resume_signal(
     back_above_ma5 = latest.close > context.ma5
     broke_previous_high = latest.close > previous.high
     if back_above_ma5 and broke_previous_high:
-        if not rebound_volume_expanding:
+        if rebound_volume_expanding:
+            if not bool(confirmation_metrics["photo_conditions_confirmed"]):
+                return None
+            level = SignalLevel.CONFIRMED
+            timing_status = "READY"
+            timing_note = (
+                "回檔守住20日線後，收盤站回5日線並突破前一日高點，"
+                "且轉強量大於回檔均量，回後買上漲買點成立。"
+            )
+            score = 92
+        elif rebound_volume_watch_ok:
+            level = SignalLevel.TRIAL
+            timing_status = "TRIAL_ENTRY"
+            timing_note = (
+                "價格已站回5日線並突破前一日高點，但轉強量只有回檔均量的"
+                f"{rebound_volume_ratio:.2f}倍，先列觀察，不視為確認買點。"
+            )
+            score = 78
+        else:
             return None
-        if not bool(confirmation_metrics["photo_conditions_confirmed"]):
-            return None
-        level = SignalLevel.CONFIRMED
-        timing_status = "READY"
-        timing_note = (
-            "回檔守住20日線後，收盤站回5日線並突破前一日高點，"
-            "且轉強量大於回檔均量，回後買上漲買點成立。"
-        )
-        score = 92
     elif back_above_ma5:
-        if not rebound_volume_expanding:
+        if not rebound_volume_watch_ok:
             return None
         level = SignalLevel.TRIAL
         timing_status = "TRIAL_ENTRY"
         timing_note = (
-            "已站回5日線且轉強量大於回檔均量，"
+            "已站回5日線且轉強量接近或大於回檔均量，"
             "但尚未突破前一日高點，只視為轉強中。"
         )
         score = 80
@@ -482,6 +495,8 @@ def pullback_resume_signal(
             (
                 "紅K收盤站回5日線、突破前一日高點，且轉強量大於回檔均量"
                 if level == SignalLevel.CONFIRMED
+                else "價格轉強但轉強量尚未完全確認，先列觀察"
+                if back_above_ma5 and broke_previous_high
                 else "等待回檔後重新轉強"
             ),
             (
@@ -502,6 +517,8 @@ def pullback_resume_signal(
             "pullback_volume_contracting": pullback_volume_contracting,
             "rebound_volume_ratio": rebound_volume_ratio,
             "rebound_volume_expanding": rebound_volume_expanding,
+            "rebound_volume_watch_ok": rebound_volume_watch_ok,
+            "rebound_volume_watch_threshold": PULLBACK_REBOUND_WATCH_VOLUME_RATIO,
             **confirmation_metrics,
         },
     )

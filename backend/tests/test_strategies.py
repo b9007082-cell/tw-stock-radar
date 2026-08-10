@@ -316,7 +316,7 @@ def test_pullback_without_volume_contraction_is_rejected() -> None:
     assert pullback_resume_signal(bars) is None
 
 
-def test_pullback_without_rebound_volume_expansion_is_rejected() -> None:
+def test_pullback_near_rebound_volume_is_trial_observation() -> None:
     bars = _pullback_bars(SignalLevel.CONFIRMED)
     original = bars[-1]
     bars[-1] = Bar(
@@ -326,6 +326,26 @@ def test_pullback_without_rebound_volume_expansion_is_rejected() -> None:
         low=original.low,
         close=original.close,
         volume=2_300_000,
+        turnover=original.turnover,
+    )
+    signal = pullback_resume_signal(bars)
+    assert signal is not None
+    assert signal.level == SignalLevel.TRIAL
+    assert signal.executable is False
+    assert signal.metrics["rebound_volume_expanding"] is False
+    assert signal.metrics["rebound_volume_watch_ok"] is True
+
+
+def test_pullback_weak_rebound_volume_is_rejected() -> None:
+    bars = _pullback_bars(SignalLevel.CONFIRMED)
+    original = bars[-1]
+    bars[-1] = Bar(
+        date=original.date,
+        open=original.open,
+        high=original.high,
+        low=original.low,
+        close=original.close,
+        volume=2_000_000,
         turnover=original.turnover,
     )
     assert pullback_resume_signal(bars) is None
