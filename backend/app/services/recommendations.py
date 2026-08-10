@@ -5,7 +5,7 @@ from typing import Any
 
 
 RECOMMENDATION_LIMIT = 10
-RECOMMENDATION_VERSION = "2026.08.r11"
+RECOMMENDATION_VERSION = "2026.08.r12"
 MAX_STRUCTURE_RISK_PERCENT = 8.0
 MIN_PULLBACK_REWARD_RISK = 1.5
 MAX_LORENTZIAN_RISK_PERCENT = 10.0
@@ -324,19 +324,51 @@ def _intraday_ma60_score(
     ma60 = _number(metrics.get("intraday_ma60"))
     close = _number(metrics.get("intraday_close")) or _number(signal.get("close"))
     volume_lots = _number(metrics.get("daily_volume_lots"))
+    intraday_volume_ratio = _number(metrics.get("intraday_volume_ratio")) or 0.0
+    macd_line = _number(metrics.get("intraday_macd_line")) or 0.0
+    bullish_alignment = metrics.get("daily_bullish_alignment") is True
+    ma60_turning_up = metrics.get("intraday_ma60_turning_up") is True
+    macd_above_zero = metrics.get("intraday_macd_above_zero") is True
+    volume_breakout = metrics.get("intraday_volume_breakout") is True
+    reclaimed = metrics.get("reclaimed_intraday_ma60") is True
+    pullback_hold = metrics.get("pulled_back_without_breaking_intraday_ma60") is True
     if distance is None or signed_distance is None or ma60 is None or close is None:
         return None
-    distance_score = 42 * _clamp((1.5 - distance) / 1.5)
-    slope_score = 24 * _clamp((slope + 0.4) / 1.2)
-    side_score = 18 if signed_distance >= 0 else 8
-    volume_score = 16 * _clamp(((volume_lots or 0.0) - 2000) / 8000)
-    score = distance_score + slope_score + side_score + volume_score
+    if not (bullish_alignment and ma60_turning_up and macd_above_zero):
+        return None
+    distance_score = 28 * _clamp((1.5 - distance) / 1.5)
+    slope_score = 22 * _clamp(slope / 0.8)
+    macd_score = 16 * _clamp(macd_line / max(close * 0.01, 0.01))
+    setup_score = 18 if reclaimed else 14 if pullback_hold else 8 if signed_distance >= 0 else 2
+    volume_score = (
+        10 * _clamp((intraday_volume_ratio - 1.0) / 1.0)
+        if intraday_volume_ratio > 0
+        else 6 * _clamp(((volume_lots or 0.0) - 2000) / 8000)
+    )
+    confirmation_score = 6 if volume_breakout else 0
+    score = (
+        distance_score
+        + slope_score
+        + macd_score
+        + setup_score
+        + volume_score
+        + confirmation_score
+    )
     reasons = [
+        "日線多頭排列",
         f"距60分MA60 {signed_distance:+.2f}%",
-        f"60MA {ma60:.2f}",
-        f"60MA斜率 {slope:+.2f}%",
-        "站上60MA" if signed_distance >= 0 else "貼近60MA下方",
+        f"60MA上彎 {slope:+.2f}%",
+        f"MACD {macd_line:+.3f}",
+        "放量突破60MA"
+        if reclaimed and volume_breakout
+        else "回踩60MA不破"
+        if pullback_hold
+        else "站上60MA"
+        if signed_distance >= 0
+        else "等待站回60MA",
     ]
+    if intraday_volume_ratio > 0:
+        reasons.append(f"60分量比 {intraday_volume_ratio:.2f}倍")
     if volume_lots is not None:
         reasons.append(f"日成交 {volume_lots:.0f}張")
     return round(score, 1), round(distance, 2), reasons

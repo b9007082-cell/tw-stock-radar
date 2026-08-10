@@ -30,7 +30,7 @@ const strategyLabel: Record<Signal["strategy"], string> = {
   DISPOSITION_REVERSAL: "處置反彈",
   BOTTOM_REVERSAL: "搶反彈",
   BOLLINGER_SQUEEZE: "布林收斂",
-  INTRADAY_MA60_TOUCH: "60分K近60MA",
+  INTRADAY_MA60_TOUCH: "6060戰法",
   LOW_PRICE_HIGH_YIELD: "低檔高殖利率",
   LORENTZIAN_ML: "Lorentzian ML",
 };
@@ -42,7 +42,7 @@ const strategyTabs = [
   ["DISPOSITION_REVERSAL", "處置反彈"],
   ["BOTTOM_REVERSAL", "搶反彈"],
   ["BOLLINGER_SQUEEZE", "布林收斂"],
-  ["INTRADAY_MA60_TOUCH", "60分K近60MA"],
+  ["INTRADAY_MA60_TOUCH", "6060戰法"],
   ["LOW_PRICE_HIGH_YIELD", "低檔高殖利率"],
   ["LORENTZIAN_ML", "Lorentzian ML"],
 ] as const;
@@ -178,17 +178,38 @@ function TrendMetricsPanel({ signal }: { signal: Signal }) {
     const distance = metricNumber(signal, "intraday_distance_to_ma60_percent");
     const ma60 = metricNumber(signal, "intraday_ma60");
     const slope = metricNumber(signal, "intraday_ma60_slope_percent");
+    const macd = metricNumber(signal, "intraday_macd_line");
+    const volumeRatio = metricNumber(signal, "intraday_volume_ratio");
+    const dailyMa5 = metricNumber(signal, "daily_ma5");
+    const dailyMa10 = metricNumber(signal, "daily_ma10");
+    const dailyMa20 = metricNumber(signal, "daily_ma20");
+    const dailyMa60 = metricNumber(signal, "daily_ma60");
+    const volumeBreakout = signal.metrics.intraday_volume_breakout;
     const barTime = signal.metrics.intraday_bar_time;
     const items = [
+      [
+        "日線多頭",
+        dailyMa5 && dailyMa10 && dailyMa20 && dailyMa60
+          ? `${dailyMa5.toFixed(1)}>${dailyMa10.toFixed(1)}>${dailyMa20.toFixed(1)}>${dailyMa60.toFixed(1)}`
+          : "—",
+      ],
       ["60分MA60", formatPrice(ma60)],
       ["距60MA", distance == null ? "—" : `${distance.toFixed(2)}%`],
-      ["60MA斜率", slope == null ? "—" : `${slope.toFixed(2)}%`],
+      ["60MA上彎", slope == null ? "—" : `${slope.toFixed(2)}%`],
+      ["MACD零軸", macd == null ? "—" : `${macd.toFixed(3)}`],
+      [
+        "60分量比",
+        volumeRatio == null || volumeRatio === 0
+          ? "資料不足"
+          : `${volumeRatio.toFixed(2)}倍`,
+      ],
+      ["進場訊號", volumeBreakout ? "放量突破/確認" : "等待放量"],
       ["資料時間", typeof barTime === "string" ? barTime.slice(5, 16) : "—"],
     ];
     return (
       <div className="mt-4 rounded-xl border border-sky-400/20 bg-sky-400/5 p-3">
         <div className="mb-3 text-xs font-bold tracking-wider text-sky-200">
-          60分K MA60 檢查
+          6060戰法檢查
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {items.map(([label, value]) => (
@@ -356,6 +377,7 @@ function RecommendationBoard({
             item,
             "intraday_ma60_slope_percent",
           );
+          const intradayVolumeRatio = metricNumber(item, "intraday_volume_ratio");
           const dividendYield = metricNumber(item, "dividend_yield");
           const distanceFromLow = metricNumber(
             item,
@@ -419,9 +441,17 @@ function RecommendationBoard({
                     </span>
                   )}
                   {item.strategy === "INTRADAY_MA60_TOUCH" && (
-                    <span>
-                      斜率 {intradaySlope == null ? "—" : `${intradaySlope.toFixed(2)}%`}
-                    </span>
+                    <>
+                      <span>
+                        上彎 {intradaySlope == null ? "—" : `${intradaySlope.toFixed(2)}%`}
+                      </span>
+                      <span>
+                        量比{" "}
+                        {intradayVolumeRatio == null || intradayVolumeRatio === 0
+                          ? "—"
+                          : `${intradayVolumeRatio.toFixed(2)}倍`}
+                      </span>
+                    </>
                   )}
                   {item.strategy === "LOW_PRICE_HIGH_YIELD" && (
                     <span>
@@ -572,7 +602,7 @@ export function Dashboard() {
             台股起漲雷達
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            回後買上漲 × 盤整突破 × 處置反彈 × 搶反彈 × 布林收斂 × 60分K近60MA × 低檔高殖利率 × Lorentzian ML｜依公開教學原則量化
+            回後買上漲 × 盤整突破 × 處置反彈 × 搶反彈 × 布林收斂 × 6060戰法 × 低檔高殖利率 × Lorentzian ML｜依公開教學原則量化
           </p>
         </div>
         <div className="text-left text-xs leading-6 text-slate-400 sm:text-right">
@@ -652,8 +682,8 @@ export function Dashboard() {
           onSelect={selectRecommendation}
         />
         <RecommendationBoard
-          title="60分K近60MA Top 10"
-          subtitle="60分鐘K線靠近60MA｜短線回測觀察"
+          title="6060戰法 Top 10"
+          subtitle="日線多頭｜60分60MA上彎｜MACD零軸上｜放量突破"
           items={recommendations?.intraday_ma60_touch ?? []}
           accent="sky"
           onSelect={selectRecommendation}

@@ -309,7 +309,15 @@ def test_intraday_ma60_touch_has_independent_ranking_bucket() -> None:
             "intraday_abs_distance_to_ma60_percent": 1.4,
             "intraday_distance_to_ma60_percent": -1.4,
             "intraday_ma60": 101.4,
-            "intraday_ma60_slope_percent": -0.1,
+            "intraday_ma60_slope_percent": 0.05,
+            "daily_bullish_alignment": True,
+            "intraday_ma60_turning_up": True,
+            "intraday_macd_above_zero": True,
+            "intraday_macd_line": 0.05,
+            "intraday_volume_ratio": 1.0,
+            "intraday_volume_breakout": False,
+            "reclaimed_intraday_ma60": False,
+            "pulled_back_without_breaking_intraday_ma60": False,
             "daily_volume_lots": 2500,
         },
     )
@@ -323,6 +331,14 @@ def test_intraday_ma60_touch_has_independent_ranking_bucket() -> None:
             "intraday_distance_to_ma60_percent": 0.2,
             "intraday_ma60": 99.8,
             "intraday_ma60_slope_percent": 0.25,
+            "daily_bullish_alignment": True,
+            "intraday_ma60_turning_up": True,
+            "intraday_macd_above_zero": True,
+            "intraday_macd_line": 0.35,
+            "intraday_volume_ratio": 1.6,
+            "intraday_volume_breakout": True,
+            "reclaimed_intraday_ma60": True,
+            "pulled_back_without_breaking_intraday_ma60": False,
             "daily_volume_lots": 6200,
         },
     )
@@ -330,6 +346,7 @@ def test_intraday_ma60_touch_has_independent_ranking_bucket() -> None:
     items = result["intraday_ma60_touch"]
     assert [item["symbol"] for item in items] == ["6002", "6001"]
     assert "距60分MA60 +0.20%" in items[0]["ranking_reasons"]
+    assert "日線多頭排列" in items[0]["ranking_reasons"]
     assert items[0]["structure_risk_percent"] == 0.2
 
 
