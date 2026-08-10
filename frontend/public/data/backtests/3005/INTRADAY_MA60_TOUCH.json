@@ -9,9 +9,9 @@
   "max_drawdown": 0.0,
   "profit_factor": 0.0,
   "sharpe_like": 0.0,
-  "strategy": "BOLLINGER_SQUEEZE",
+  "strategy": "INTRADAY_MA60_TOUCH",
   "strategy_version": "2026.08.v22",
-  "symbol": "2002",
+  "symbol": "3005",
   "total_return": 0.0,
   "trades": 0,
   "win_rate": 0.0

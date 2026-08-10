@@ -184,13 +184,17 @@ function TrendMetricsPanel({ signal }: { signal: Signal }) {
     const dailyMa10 = metricNumber(signal, "daily_ma10");
     const dailyMa20 = metricNumber(signal, "daily_ma20");
     const dailyMa60 = metricNumber(signal, "daily_ma60");
+    const dailyMa20Slope = metricNumber(signal, "daily_ma20_slope_percent");
+    const dailyMa60Slope = metricNumber(signal, "daily_ma60_slope_percent");
     const volumeBreakout = signal.metrics.intraday_volume_breakout;
     const barTime = signal.metrics.intraday_bar_time;
     const items = [
       [
-        "日線多頭",
-        dailyMa5 && dailyMa10 && dailyMa20 && dailyMa60
-          ? `${dailyMa5.toFixed(1)}>${dailyMa10.toFixed(1)}>${dailyMa20.toFixed(1)}>${dailyMa60.toFixed(1)}`
+        "日線20/60MA",
+        dailyMa20Slope != null && dailyMa60Slope != null
+          ? `${dailyMa20Slope.toFixed(2)}% / ${dailyMa60Slope.toFixed(2)}%`
+          : dailyMa5 && dailyMa10 && dailyMa20 && dailyMa60
+            ? `20MA ${dailyMa20.toFixed(1)} / 60MA ${dailyMa60.toFixed(1)}`
           : "—",
       ],
       ["60分MA60", formatPrice(ma60)],
@@ -683,7 +687,7 @@ export function Dashboard() {
         />
         <RecommendationBoard
           title="6060戰法 Top 10"
-          subtitle="日線多頭｜60分60MA上彎｜MACD零軸上｜放量突破"
+          subtitle="日線20/60MA向上｜60分60MA上彎｜MACD零軸上｜放量突破"
           items={recommendations?.intraday_ma60_touch ?? []}
           accent="sky"
           onSelect={selectRecommendation}
