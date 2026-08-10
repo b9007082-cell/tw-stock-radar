@@ -103,18 +103,26 @@ def _pullback_bars(level: SignalLevel) -> list[Bar]:
 
 
 def _breakout_bars(level: SignalLevel) -> list[Bar]:
-    bars = _uptrend_base()
-    for close in (87.2, 86.7, 87.2):
-        bars.append(_bar(len(bars), close, 2_400_000))
+    bars: list[Bar] = []
+    for index in range(40):
+        bars.append(_bar(index, 78 - index * 0.5, 3_000_000))
+    for _ in range(20):
+        offset = len(bars) % 5
+        bars.append(_bar(len(bars), 55.5 + offset * 0.45, 3_000_000))
+    for _ in range(20):
+        offset = len(bars) % 5
+        close = 55.2 + offset * 0.22
+        volume = 2_000_000 if offset % 2 == 0 else 2_200_000
+        bars.append(_bar(len(bars), close, volume))
     if level == SignalLevel.WATCH:
-        bars.append(_bar(len(bars), 89.0, 2_400_000))
+        bars.append(_bar(len(bars), 56.2, 2_200_000))
     elif level == SignalLevel.TRIAL:
-        trial = _bar(len(bars), 89.0, 3_000_000)
+        trial = _bar(len(bars), 57.25, 2_300_000)
         bars.append(
             Bar(
                 date=trial.date,
                 open=trial.open,
-                high=89.6,
+                high=58.6,
                 low=trial.low,
                 close=trial.close,
                 volume=trial.volume,
@@ -122,7 +130,7 @@ def _breakout_bars(level: SignalLevel) -> list[Bar]:
             )
         )
     else:
-        bars.append(_bar(len(bars), 89.7, 3_600_000))
+        bars.append(_bar(len(bars), 58.8, 3_600_000))
     return bars
 
 
@@ -355,9 +363,10 @@ def test_consolidation_watch_uses_latest_confirmed_peak() -> None:
     signal = consolidation_signal(_breakout_bars(SignalLevel.WATCH))
     assert signal is not None
     assert signal.level == SignalLevel.WATCH
-    assert signal.trigger_price == round(float(signal.metrics["latest_peak"]), 2)
+    assert signal.trigger_price == round(float(signal.metrics["base_high"]), 2)
     assert signal.executable is False
     assert signal.metrics["volume_contracting"] is True
+    assert signal.metrics["bottom_zone"] is True
 
 
 def test_intraday_breakout_without_close_is_trial_only() -> None:
@@ -402,7 +411,7 @@ def test_consolidation_without_breakout_volume_is_rejected() -> None:
         high=original.high,
         low=original.low,
         close=original.close,
-        volume=2_500_000,
+        volume=2_000_000,
         turnover=original.turnover,
     )
     assert consolidation_signal(bars) is None

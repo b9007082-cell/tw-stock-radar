@@ -12,6 +12,16 @@ MAX_VOLUME_CONTRACTION_RATIO = 1.0
 PULLBACK_REBOUND_WATCH_VOLUME_RATIO = 0.85
 MIN_TRADE_VOLUME_SHARES = 2_000_000
 MIN_TRADE_VOLUME_LOTS = MIN_TRADE_VOLUME_SHARES / 1000
+BOTTOM_LAUNCH_LOOKBACK_DAYS = 60
+BOTTOM_LAUNCH_BASE_DAYS = 20
+BOTTOM_LAUNCH_MAX_DISTANCE_FROM_LOW_PERCENT = 45.0
+BOTTOM_LAUNCH_MAX_BASE_RANGE_PERCENT = 30.0
+BOTTOM_LAUNCH_MAX_BASE_VOLUME_RATIO = 1.05
+BOTTOM_LAUNCH_MAX_MA20_DECLINE = -0.005
+BOTTOM_LAUNCH_MAX_MA60_DECLINE = -0.03
+BOTTOM_LAUNCH_BREAKOUT_VOLUME_MULTIPLE = 1.2
+BOTTOM_LAUNCH_WATCH_VOLUME_MULTIPLE = 1.0
+BOTTOM_LAUNCH_CONFIRMATION_DISTANCE_PERCENT = 3.0
 REVERSAL_LOOKBACK_DAYS = 20
 REVERSAL_MIN_DRAWDOWN_PERCENT = 15.0
 REVERSAL_SHARP_DROP_DAYS = 5
@@ -362,7 +372,7 @@ def trend_confirmation_signal(
         trigger_price=context.latest_peak,
         timing_status="WAIT_CONFIRMATION",
         timing_note=(
-            "多頭方向已確認；等待回後買上漲或盤整突破，"
+            "多頭方向已確認；等待回後買上漲或底部起漲，"
             "方向成立本身不是買點。"
         ),
         reasons=[
@@ -527,63 +537,132 @@ def pullback_resume_signal(
 def consolidation_signal(
     bars: Sequence[Bar],
 ) -> StrategySignal | None:
-    context = _trend_context(bars)
-    if (
-        context is None
-        or not context.confirmed
-        or context.latest_trough_index <= context.latest_peak_index
-    ):
+    if len(bars) < BOTTOM_LAUNCH_LOOKBACK_DAYS + BOTTOM_LAUNCH_BASE_DAYS:
         return None
     latest = bars[-1]
     previous = bars[-2]
+    if latest.volume < MIN_TRADE_VOLUME_SHARES:
+        return None
+
+    closes = [bar.close for bar in bars]
+    volumes = [float(bar.volume) for bar in bars]
+    ma20s = sma(closes, 20)
+    ma60s = sma(closes, 60)
+    index = len(bars) - 1
+    ma20 = float(ma20s[index] or 0)
+    ma20_5 = float(ma20s[index - 5] or ma20)
+    ma60 = float(ma60s[index] or 0)
+    ma60_5 = float(ma60s[index - 5] or ma60)
+    if min(ma20, ma60, latest.close) <= 0:
+        return None
+
+    lookback_window = bars[-BOTTOM_LAUNCH_LOOKBACK_DAYS:]
+    base_window = bars[-BOTTOM_LAUNCH_BASE_DAYS - 1 : -1]
+    previous_volume_window = bars[
+        -BOTTOM_LAUNCH_BASE_DAYS * 2 - 1 : -BOTTOM_LAUNCH_BASE_DAYS - 1
+    ]
+    if len(base_window) != BOTTOM_LAUNCH_BASE_DAYS or len(previous_volume_window) != BOTTOM_LAUNCH_BASE_DAYS:
+        return None
+
+    lookback_low = min(bar.low for bar in lookback_window)
+    lookback_high = max(bar.high for bar in lookback_window)
+    lookback_low_index = len(bars) - BOTTOM_LAUNCH_LOOKBACK_DAYS + min(
+        range(len(lookback_window)),
+        key=lambda item: lookback_window[item].low,
+    )
+    base_low = min(bar.low for bar in base_window)
+    base_high = max(bar.high for bar in base_window)
+    base_high_index = len(bars) - BOTTOM_LAUNCH_BASE_DAYS - 1 + max(
+        range(len(base_window)),
+        key=lambda item: base_window[item].high,
+    )
+    stop_price = min(base_low, lookback_low)
+    if min(lookback_low, base_low, base_high, stop_price) <= 0:
+        return None
+
+    distance_from_low_percent = ((latest.close / lookback_low) - 1.0) * 100
+    drawdown_from_high_percent = ((lookback_high - latest.close) / lookback_high) * 100
+    base_range_percent = ((base_high / base_low) - 1.0) * 100
+    ma20_slope_5d = percent_change(ma20, ma20_5)
+    ma60_slope_5d = percent_change(ma60, ma60_5)
+    base_volume_avg = _average([float(bar.volume) for bar in base_window])
+    previous_volume_avg = _average(
+        [float(bar.volume) for bar in previous_volume_window]
+    )
+    base_volume_ratio = base_volume_avg / previous_volume_avg if previous_volume_avg else 0.0
+    breakout_volume_ratio = latest.volume / base_volume_avg if base_volume_avg else 0.0
+
+    bottom_zone = (
+        0 <= distance_from_low_percent <= BOTTOM_LAUNCH_MAX_DISTANCE_FROM_LOW_PERCENT
+    )
+    base_compact = base_range_percent <= BOTTOM_LAUNCH_MAX_BASE_RANGE_PERCENT
+    base_volume_contracting = 0 < base_volume_ratio <= BOTTOM_LAUNCH_MAX_BASE_VOLUME_RATIO
+    ma20_turning = latest.close > ma20 and ma20_slope_5d >= BOTTOM_LAUNCH_MAX_MA20_DECLINE
+    ma60_not_collapsing = ma60_slope_5d >= BOTTOM_LAUNCH_MAX_MA60_DECLINE
+    setup_ready = (
+        bottom_zone
+        and base_compact
+        and base_volume_contracting
+        and ma20_turning
+        and ma60_not_collapsing
+    )
+    if not setup_ready:
+        return None
+
+    context = _range_context(
+        bars,
+        range_high=base_high,
+        range_low=stop_price,
+        range_high_index=base_high_index,
+        range_low_index=lookback_low_index,
+    )
+    if context is None:
+        return None
     confirmation_metrics = _buy_confirmation_metrics(bars, context)
-    if not bool(confirmation_metrics["liquidity_ok"]):
-        return None
-    trigger = context.latest_peak
-    prior_consolidation_volumes = [float(bar.volume) for bar in bars[-21:-1]]
-    previous_volumes = [float(bar.volume) for bar in bars[-41:-21]]
-    consolidation_volume_avg = _average(prior_consolidation_volumes)
-    previous_volume_avg = _average(previous_volumes)
-    consolidation_volume_ratio = (
-        consolidation_volume_avg / previous_volume_avg
-        if previous_volume_avg
-        else 0.0
-    )
-    volume_contracting = (
-        len(prior_consolidation_volumes) == 20
-        and len(previous_volumes) == 20
-        and 0 < consolidation_volume_ratio < MAX_VOLUME_CONTRACTION_RATIO
-    )
-    breakout_volume_ratio = (
-        float(latest.volume) / consolidation_volume_avg
-        if consolidation_volume_avg
-        else 0.0
-    )
+    trigger = base_high
+    prior10_high = max(bar.high for bar in bars[-11:-1])
+    close_breaks_20d_high = latest.close > base_high
+    close_breaks_10d_high = latest.close > prior10_high
     volume_confirmed = (
-        volume_contracting and breakout_volume_ratio > BREAKOUT_VOLUME_MULTIPLE
+        breakout_volume_ratio >= BOTTOM_LAUNCH_BREAKOUT_VOLUME_MULTIPLE
     )
-    if not volume_contracting:
-        return None
-    if latest.close > trigger and volume_confirmed:
-        if not bool(confirmation_metrics["photo_conditions_confirmed"]):
+    volume_watch_ok = breakout_volume_ratio >= BOTTOM_LAUNCH_WATCH_VOLUME_MULTIPLE
+    price_volume_aligned = bool(confirmation_metrics["price_volume_aligned"])
+
+    if close_breaks_20d_high and volume_confirmed:
+        if not (
+            bool(confirmation_metrics["red_candle"])
+            and bool(confirmation_metrics["broke_previous_high"])
+            and price_volume_aligned
+        ):
             return None
         level = SignalLevel.CONFIRMED
         timing_status = "READY"
         timing_note = (
-            "整理期間量縮後，收盤突破最近確認壓力，"
-            "且成交量高於整理均量1.2倍，"
-            "盤整突破買點成立。"
+            "低位整理量縮後，今日放量收盤突破近20日整理壓力，"
+            "底部起漲確認買點成立。"
         )
         score = 94
-    elif latest.high > trigger and latest.close <= trigger:
+    elif close_breaks_10d_high and volume_watch_ok:
         level = SignalLevel.TRIAL
         timing_status = "TRIAL_ENTRY"
-        timing_note = "盤中突破但收盤未站穩最近壓力，只視為測試壓力。"
+        timing_note = (
+            "低位整理後已突破近10日短壓且量能轉強，先列轉強；"
+            "等待收盤突破近20日整理壓力才升級確認。"
+        )
         score = 82
-    elif context.ma20 < latest.close <= trigger:
+    elif (
+        latest.close <= trigger
+        and latest.close > ma20
+        and ((trigger - latest.close) / trigger) * 100
+        <= BOTTOM_LAUNCH_CONFIRMATION_DISTANCE_PERCENT
+    ):
         level = SignalLevel.WATCH
         timing_status = "WAIT_CONFIRMATION"
-        timing_note = "多頭整理守在20日線之上，等待收盤突破最近確認壓力。"
+        timing_note = (
+            "低位整理區已站回20日線，距近20日壓力不遠；"
+            "等待放量突破壓力。"
+        )
         score = 72
     else:
         return None
@@ -598,18 +677,18 @@ def consolidation_signal(
         timing_status=timing_status,
         timing_note=timing_note,
         reasons=[
-            "多頭確認：頭頭高、底底高",
             (
                 f"成交張數 {confirmation_metrics['latest_volume_lots']:.0f} 張，"
                 f"大於{MIN_TRADE_VOLUME_LOTS:.0f}張"
             ),
-            "最近確認波谷晚於最近確認波峰，整理結構完整",
-            "紅K收盤突破上頸線與前一日高點",
-            f"整理均量為前段均量的 {consolidation_volume_ratio:.2f} 倍",
+            f"距近{BOTTOM_LAUNCH_LOOKBACK_DAYS}日低點 {distance_from_low_percent:.1f}%，符合低位起漲範圍",
+            f"近{BOTTOM_LAUNCH_BASE_DAYS}日整理區間 {base_range_percent:.1f}%",
+            f"整理均量為前段均量的 {base_volume_ratio:.2f} 倍，量能未失控放大",
+            f"20MA斜率 {ma20_slope_5d * 100:+.2f}%，60MA斜率 {ma60_slope_5d * 100:+.2f}%",
             (
-                "收盤突破最近確認壓力且成交量高於整理均量1.2倍"
+                "收盤突破近20日整理壓力且成交量高於整理均量1.2倍"
                 if level == SignalLevel.CONFIRMED
-                else "等待收盤站穩最近確認壓力"
+                else "等待收盤站穩近20日整理壓力"
             ),
             (
                 "KD低檔黃金交叉向上，MACD維持0軸之上"
@@ -621,11 +700,31 @@ def consolidation_signal(
             "previous_high": previous.high,
             "volume_ratio": breakout_volume_ratio,
             "volume_confirmed": volume_confirmed,
-            "consolidation_volume_avg": consolidation_volume_avg,
+            "base_volume_avg": base_volume_avg,
             "previous_volume_avg": previous_volume_avg,
-            "consolidation_volume_ratio": consolidation_volume_ratio,
-            "volume_contracting": volume_contracting,
+            "base_volume_ratio": base_volume_ratio,
+            "consolidation_volume_avg": base_volume_avg,
+            "consolidation_volume_ratio": base_volume_ratio,
+            "volume_contracting": base_volume_contracting,
             "breakout_volume_ratio": breakout_volume_ratio,
+            "volume_watch_ok": volume_watch_ok,
+            "lookback_low": lookback_low,
+            "lookback_high": lookback_high,
+            "base_low": base_low,
+            "base_high": base_high,
+            "prior10_high": prior10_high,
+            "distance_from_low_percent": distance_from_low_percent,
+            "drawdown_from_high_percent": drawdown_from_high_percent,
+            "base_range_percent": base_range_percent,
+            "bottom_zone": bottom_zone,
+            "base_compact": base_compact,
+            "ma20": ma20,
+            "ma60": ma60,
+            "ma60_slope_5d": ma60_slope_5d,
+            "ma20_turning": ma20_turning,
+            "ma60_not_collapsing": ma60_not_collapsing,
+            "close_breaks_10d_high": close_breaks_10d_high,
+            "close_breaks_20d_high": close_breaks_20d_high,
             **confirmation_metrics,
         },
     )

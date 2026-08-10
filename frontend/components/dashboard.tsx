@@ -26,7 +26,7 @@ const levelLabel: Record<SignalLevel, string> = {
 const strategyLabel: Record<Signal["strategy"], string> = {
   TREND_CONFIRMATION: "多頭確認",
   PULLBACK_RESUME: "回後買上漲",
-  CONSOLIDATION_BREAKOUT: "盤整突破",
+  CONSOLIDATION_BREAKOUT: "底部起漲",
   DISPOSITION_REVERSAL: "處置反彈",
   BOTTOM_REVERSAL: "搶反彈",
   BOLLINGER_SQUEEZE: "布林收斂",
@@ -38,7 +38,7 @@ const strategyLabel: Record<Signal["strategy"], string> = {
 const strategyTabs = [
   ["ALL", "全部策略"],
   ["PULLBACK_RESUME", "回後買上漲"],
-  ["CONSOLIDATION_BREAKOUT", "盤整突破"],
+  ["CONSOLIDATION_BREAKOUT", "底部起漲"],
   ["DISPOSITION_REVERSAL", "處置反彈"],
   ["BOTTOM_REVERSAL", "搶反彈"],
   ["BOLLINGER_SQUEEZE", "布林收斂"],
@@ -606,7 +606,7 @@ export function Dashboard() {
             台股起漲雷達
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            回後買上漲 × 盤整突破 × 處置反彈 × 搶反彈 × 布林收斂 × 6060戰法 × 低檔高殖利率 × Lorentzian ML｜依公開教學原則量化
+            回後買上漲 × 底部起漲 × 處置反彈 × 搶反彈 × 布林收斂 × 6060戰法 × 低檔高殖利率 × Lorentzian ML｜依公開教學原則量化
           </p>
         </div>
         <div className="text-left text-xs leading-6 text-slate-400 sm:text-right">
@@ -658,8 +658,8 @@ export function Dashboard() {
           onSelect={selectRecommendation}
         />
         <RecommendationBoard
-          title="盤整突破 Top 10"
-          subtitle="確認優先｜風險 ≤ 8%｜量能與突破距離排序"
+          title="底部起漲 Top 10"
+          subtitle="低位整理｜量縮後放量｜突破10/20日壓力"
           items={recommendations?.consolidation_breakout ?? []}
           accent="cyan"
           onSelect={selectRecommendation}

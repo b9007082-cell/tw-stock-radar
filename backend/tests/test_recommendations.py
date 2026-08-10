@@ -49,15 +49,33 @@ def _signal(
     }
 
 
-def test_excludes_structure_risk_above_eight_percent() -> None:
+def test_pullback_excludes_structure_risk_above_eight_percent() -> None:
     signal = _signal(
         "1001",
-        "CONSOLIDATION_BREAKOUT",
+        "PULLBACK_RESUME",
         close=100,
         stop=91.9,
+        peak=120,
     )
     result = build_recommendations([signal])
-    assert result["consolidation_breakout"] == []
+    assert result["pullback_resume"] == []
+
+
+def test_bottom_launch_allows_wider_base_risk() -> None:
+    signal = _signal(
+        "2001",
+        "CONSOLIDATION_BREAKOUT",
+        close=100,
+        stop=75,
+        extra_metrics={
+            "distance_from_low_percent": 15,
+            "base_range_percent": 12,
+            "base_volume_ratio": 0.72,
+        },
+    )
+    result = build_recommendations([signal])
+    assert result["consolidation_breakout"][0]["symbol"] == "2001"
+    assert result["consolidation_breakout"][0]["structure_risk_percent"] == 25.0
 
 
 def test_pullback_requires_at_least_one_point_five_r() -> None:

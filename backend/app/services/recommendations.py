@@ -5,8 +5,9 @@ from typing import Any
 
 
 RECOMMENDATION_LIMIT = 10
-RECOMMENDATION_VERSION = "2026.08.r14"
+RECOMMENDATION_VERSION = "2026.08.r15"
 MAX_STRUCTURE_RISK_PERCENT = 8.0
+MAX_BOTTOM_LAUNCH_RISK_PERCENT = 30.0
 MIN_PULLBACK_REWARD_RISK = 1.5
 MAX_LORENTZIAN_RISK_PERCENT = 10.0
 
@@ -101,23 +102,46 @@ def _breakout_score(
     volume_ratio = _number(metrics.get("volume_ratio")) or 0.0
     if close is None or trigger is None or trigger <= 0:
         return None
-    volume_score = 30 * _clamp((volume_ratio - 0.5) / 1.5)
+    distance_from_low = _number(metrics.get("distance_from_low_percent"))
+    base_range = _number(metrics.get("base_range_percent"))
+    base_volume_ratio = _number(metrics.get("base_volume_ratio"))
+    if base_volume_ratio is None:
+        base_volume_ratio = _number(metrics.get("consolidation_volume_ratio"))
+    volume_score = 24 * _clamp((volume_ratio - 0.8) / 1.2)
+    low_zone_score = (
+        18 * _clamp((45.0 - distance_from_low) / 30.0)
+        if distance_from_low is not None
+        else 0.0
+    )
+    base_score = (
+        14 * _clamp((30.0 - base_range) / 18.0)
+        if base_range is not None
+        else 0.0
+    )
+    contraction_score = (
+        10 * _clamp((1.1 - base_volume_ratio) / 0.35)
+        if base_volume_ratio is not None
+        else 0.0
+    )
     level = str(signal.get("level", ""))
     if level == "CONFIRMED":
         distance = max(0.0, (close - trigger) / trigger)
-        proximity_score = 25 * _clamp(
+        proximity_score = 16 * _clamp(
             1.0 - max(0.0, distance - 0.03) / 0.05
         )
         distance_label = f"突破壓力 {distance * 100:.2f}%"
     else:
         distance = max(0.0, (trigger - close) / trigger)
-        proximity_score = 25 * _clamp(1.0 - distance / 0.03)
+        proximity_score = 16 * _clamp(1.0 - distance / 0.03)
         distance_label = f"距壓力 {distance * 100:.2f}%"
     score = (
         volume_score
         + proximity_score
-        + _risk_score(risk_percent)
-        + _slope_score(metrics)
+        + _risk_score(risk_percent, weight=18.0)
+        + _slope_score(metrics, weight=12.0)
+        + low_zone_score
+        + base_score
+        + contraction_score
     )
     reasons = [
         f"量比 {volume_ratio:.2f}倍",
@@ -127,9 +151,12 @@ def _breakout_score(
     latest_volume_lots = _number(metrics.get("latest_volume_lots"))
     if latest_volume_lots is not None:
         reasons.append(f"成交 {latest_volume_lots:.0f}張")
-    consolidation_volume_ratio = _number(metrics.get("consolidation_volume_ratio"))
-    if consolidation_volume_ratio is not None:
-        reasons.append(f"整理量縮 {consolidation_volume_ratio:.2f}倍")
+    if distance_from_low is not None:
+        reasons.append(f"距60日低點 {distance_from_low:.1f}%")
+    if base_range is not None:
+        reasons.append(f"20日區間 {base_range:.1f}%")
+    if base_volume_ratio is not None:
+        reasons.append(f"整理量縮 {base_volume_ratio:.2f}倍")
     if metrics.get("indicator_ideal") is True:
         reasons.append("KD/MACD同步")
     return round(score, 1), reasons
@@ -545,13 +572,23 @@ def build_recommendations(
             continue
         if strategy not in {"PULLBACK_RESUME", "CONSOLIDATION_BREAKOUT"}:
             continue
-        if level not in {"TRIAL", "CONFIRMED"}:
+        allowed_levels = (
+            {"WATCH", "TRIAL", "CONFIRMED"}
+            if strategy == "CONSOLIDATION_BREAKOUT"
+            else {"TRIAL", "CONFIRMED"}
+        )
+        if level not in allowed_levels:
             continue
         risk_percent = _structure_risk(signal)
+        max_risk_percent = (
+            MAX_BOTTOM_LAUNCH_RISK_PERCENT
+            if strategy == "CONSOLIDATION_BREAKOUT"
+            else MAX_STRUCTURE_RISK_PERCENT
+        )
         if (
             risk_percent is None
             or risk_percent <= 0
-            or risk_percent > MAX_STRUCTURE_RISK_PERCENT
+            or risk_percent > max_risk_percent
         ):
             continue
         reward_risk_ratio: float | None = None
