@@ -304,34 +304,43 @@ def _bollinger_squeeze_score(
     lower = _number(metrics.get("bollinger_lower"))
     width_percent = _number(metrics.get("bollinger_width_percent"))
     width_percentile = _number(metrics.get("bollinger_width_percentile"))
+    previous_width_percentile = _number(metrics.get("previous_bollinger_width_percentile"))
     volume_ratio = _number(metrics.get("volume_ratio")) or 0.0
+    close_position_percent = _number(metrics.get("close_position_percent")) or 0.0
     if (
         close is None
         or upper is None
         or lower is None
         or width_percent is None
         or width_percentile is None
+        or previous_width_percentile is None
         or upper <= lower
     ):
         return None
-    squeeze_score = 35 * _clamp((0.25 - width_percentile) / 0.25)
-    distance_to_upper = (upper - close) / upper if close <= upper else 0.0
-    observation_risk_percent = max(0.0, distance_to_upper) * 100
-    proximity_score = 25 * _clamp(1.0 - distance_to_upper / 0.04)
-    breakout_score = 15 if metrics.get("bollinger_breakout_upper") is True else 0
-    volume_score = 15 * _clamp((volume_ratio - 0.8) / 0.8)
+    if not (
+        metrics.get("bollinger_first_breakout_upper") is True
+        and metrics.get("main_force_buying") is True
+    ):
+        return None
+    breakout_distance_percent = ((close - upper) / upper) * 100
+    observation_risk_percent = 0.0
+    squeeze_score = 30 * _clamp((0.25 - previous_width_percentile) / 0.25)
+    breakout_score = 25 * _clamp(breakout_distance_percent / 3.0)
+    volume_score = 25 * _clamp((volume_ratio - 1.2) / 1.3)
+    close_position_score = 10 * _clamp((close_position_percent - 70.0) / 25.0)
     score = (
         squeeze_score
-        + proximity_score
         + breakout_score
         + volume_score
+        + close_position_score
         + _risk_score(observation_risk_percent, weight=10.0)
     )
     reasons = [
         f"布林寬度 {width_percent:.2f}%",
-        f"寬度分位 {width_percentile * 100:.0f}%",
-        f"距上軌 {max(0.0, distance_to_upper) * 100:.2f}%",
-        "突破上軌" if metrics.get("bollinger_breakout_upper") is True else "等待突破上軌",
+        f"前一日寬度分位 {previous_width_percentile * 100:.0f}%",
+        f"突破上軌 {breakout_distance_percent:+.2f}%",
+        "第一根突破上軌",
+        "主力攻擊量",
     ]
     latest_volume_lots = _number(metrics.get("latest_volume_lots"))
     if latest_volume_lots is not None:

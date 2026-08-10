@@ -216,20 +216,31 @@ function TrendMetricsPanel({ signal }: { signal: Signal }) {
   }
   if (signal.strategy === "BOLLINGER_SQUEEZE") {
     const width = metricNumber(signal, "bollinger_width_percent");
-    const percentile = metricNumber(signal, "bollinger_width_percentile");
+    const percentile = metricNumber(signal, "previous_bollinger_width_percentile");
+    const volumeRatio = metricNumber(signal, "volume_ratio");
+    const closePosition = metricNumber(signal, "close_position_percent");
+    const mainForceBuying = signal.metrics.main_force_buying === true;
     const items = [
       ["布林寬度", width == null ? "—" : `${width.toFixed(2)}%`],
       [
-        "寬度分位",
+        "收斂分位",
         percentile == null ? "—" : `${(percentile * 100).toFixed(0)}%`,
       ],
       ["上通道", formatPrice(metricNumber(signal, "bollinger_upper"))],
-      ["下通道", formatPrice(metricNumber(signal, "bollinger_lower"))],
+      [
+        "突破型態",
+        signal.metrics.bollinger_first_breakout_upper === true
+          ? "第一根突破上緣"
+          : "—",
+      ],
+      ["主力購買", mainForceBuying ? "符合" : "—"],
+      ["量比", volumeRatio == null ? "—" : `${volumeRatio.toFixed(2)}倍`],
+      ["收盤位置", closePosition == null ? "—" : `${closePosition.toFixed(0)}%`],
     ];
     return (
       <div className="mt-4 rounded-xl border border-fuchsia-400/20 bg-fuchsia-400/5 p-3">
         <div className="mb-3 text-xs font-bold tracking-wider text-fuchsia-200">
-          布林通道收斂檢查
+          布林收斂突破檢查
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {items.map(([label, value]) => (
@@ -665,8 +676,8 @@ export function Dashboard() {
           onSelect={selectRecommendation}
         />
         <RecommendationBoard
-          title="布林收斂 Top 10"
-          subtitle="上通道與下通道靠近｜等待突破方向"
+          title="布林收斂突破 Top 10"
+          subtitle="收斂後第一根突破上緣｜主力攻擊量"
           items={recommendations?.bollinger_squeeze ?? []}
           accent="fuchsia"
           onSelect={selectRecommendation}

@@ -278,43 +278,53 @@ def test_lorentzian_ml_has_independent_ranking_bucket() -> None:
 
 
 def test_bollinger_squeeze_has_independent_ranking_bucket() -> None:
-    wide = _signal(
+    weak = _signal(
         "5001",
         "BOLLINGER_SQUEEZE",
-        level="WATCH",
-        close=100,
+        level="CONFIRMED",
+        close=103,
         stop=96,
         extra_metrics={
-            "bollinger_upper": 103,
+            "bollinger_upper": 102,
             "bollinger_lower": 97,
             "bollinger_width_percent": 6.0,
-            "bollinger_width_percentile": 0.18,
-            "bollinger_breakout_upper": False,
-            "volume_ratio": 0.9,
+            "bollinger_width_percentile": 0.12,
+            "previous_bollinger_width_percentile": 0.18,
+            "bollinger_first_breakout_upper": True,
+            "bollinger_breakout_upper": True,
+            "main_force_buying": True,
+            "close_position_percent": 74,
+            "volume_ratio": 1.55,
             "latest_volume_lots": 2400,
         },
     )
-    tight = _signal(
+    strong = _signal(
         "5002",
         "BOLLINGER_SQUEEZE",
-        level="TRIAL",
-        close=101.5,
+        level="CONFIRMED",
+        close=103.5,
         stop=97,
         extra_metrics={
             "bollinger_upper": 102,
             "bollinger_lower": 99,
             "bollinger_width_percent": 3.0,
             "bollinger_width_percentile": 0.05,
-            "bollinger_breakout_upper": False,
-            "volume_ratio": 1.1,
+            "previous_bollinger_width_percentile": 0.05,
+            "bollinger_first_breakout_upper": True,
+            "bollinger_breakout_upper": True,
+            "main_force_buying": True,
+            "close_position_percent": 88,
+            "volume_ratio": 2.0,
             "latest_volume_lots": 3200,
         },
     )
-    result = build_recommendations([wide, tight])
+    result = build_recommendations([weak, strong])
     items = result["bollinger_squeeze"]
     assert [item["symbol"] for item in items] == ["5002", "5001"]
     assert "布林寬度 3.00%" in items[0]["ranking_reasons"]
-    assert items[0]["structure_risk_percent"] == 0.49
+    assert "第一根突破上軌" in items[0]["ranking_reasons"]
+    assert "主力攻擊量" in items[0]["ranking_reasons"]
+    assert items[0]["structure_risk_percent"] == 0.0
 
 
 def test_intraday_ma60_touch_has_independent_ranking_bucket() -> None:

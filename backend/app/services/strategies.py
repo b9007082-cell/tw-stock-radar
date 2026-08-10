@@ -51,6 +51,8 @@ BOLLINGER_MULTIPLIER = 2.0
 BOLLINGER_LOOKBACK = 80
 BOLLINGER_MAX_WIDTH_PERCENTILE = 0.2
 BOLLINGER_BREAKOUT_VOLUME_MULTIPLE = 1.2
+BOLLINGER_MAIN_FORCE_VOLUME_MULTIPLE = 1.5
+BOLLINGER_BREAKOUT_LOOKBACK = 5
 INTRADAY_MA_PERIOD = 60
 INTRADAY_MA_MAX_DISTANCE_PERCENT = 1.5
 INTRADAY_MA_READY_DISTANCE_PERCENT = 0.6
@@ -1153,22 +1155,28 @@ def bollinger_squeeze_signal(
     closes = [bar.close for bar in bars]
     bands = _bollinger_series(closes)
     latest_band = bands[-1]
-    if latest_band is None:
+    previous_band = bands[-2]
+    if latest_band is None or previous_band is None:
         return None
     upper, middle, lower, width_percent = latest_band
+    previous_upper, _previous_middle, _previous_lower, previous_width_percent = previous_band
     if middle <= 0 or lower <= 0:
         return None
 
-    recent_widths = [
+    previous_widths = [
         band[3]
-        for band in bands[-BOLLINGER_LOOKBACK:]
+        for band in bands[-BOLLINGER_LOOKBACK - 1 : -1]
         if band is not None and band[3] > 0
     ]
-    if len(recent_widths) < BOLLINGER_LOOKBACK // 2:
+    if len(previous_widths) < BOLLINGER_LOOKBACK // 2:
         return None
-    narrower_count = sum(1 for width in recent_widths if width <= width_percent)
-    width_percentile = narrower_count / len(recent_widths)
-    squeeze_confirmed = width_percentile <= BOLLINGER_MAX_WIDTH_PERCENTILE
+    previous_narrower_count = sum(
+        1 for width in previous_widths if width <= previous_width_percent
+    )
+    previous_width_percentile = previous_narrower_count / len(previous_widths)
+    latest_narrower_count = sum(1 for width in previous_widths if width <= width_percent)
+    width_percentile = latest_narrower_count / len(previous_widths)
+    squeeze_confirmed = previous_width_percentile <= BOLLINGER_MAX_WIDTH_PERCENTILE
     if not squeeze_confirmed:
         return None
 
@@ -1195,35 +1203,41 @@ def bollinger_squeeze_signal(
 
     volume20 = _average([float(bar.volume) for bar in bars[-21:-1]])
     volume_ratio = float(latest.volume) / volume20 if volume20 else 0.0
-    breakout_upper = latest.close > upper and latest.close > previous.high
-    trial_upper = latest.high > upper or latest.close > middle
+    prior_breakout_start = max(BOLLINGER_PERIOD - 1, len(bars) - BOLLINGER_BREAKOUT_LOOKBACK - 1)
+    prior_upper_breakouts = [
+        bars[index].close > band[0]
+        for index, band in enumerate(bands[prior_breakout_start:-1], start=prior_breakout_start)
+        if band is not None
+    ]
+    first_breakout_upper = (
+        latest.close > upper
+        and latest.close > previous.high
+        and previous.close <= previous_upper
+        and not any(prior_upper_breakouts)
+    )
     volume_confirmed = volume_ratio >= BOLLINGER_BREAKOUT_VOLUME_MULTIPLE
-    if breakout_upper and volume_confirmed:
-        level = SignalLevel.CONFIRMED
-        timing_status = "READY"
-        timing_note = (
-            "布林通道長時間收斂後，收盤突破上通道與前一日高點，"
-            "且成交量高於20日均量，波動擴張買點成立。"
-        )
-        trigger_price = max(upper, previous.high)
-        score = 90
-    elif trial_upper:
-        level = SignalLevel.TRIAL
-        timing_status = "TRIAL_ENTRY"
-        timing_note = (
-            "布林通道處於低寬度收斂，股價已靠近或測試上通道，"
-            "但尚未同時完成收盤突破與量能確認。"
-        )
-        trigger_price = max(upper, previous.high)
-        score = 78
-    else:
-        level = SignalLevel.WATCH
-        timing_status = "WAIT_CONFIRMATION"
-        timing_note = (
-            "布林上通道與下通道靠近，波動壓縮中；等待收盤突破上通道與量能放大。"
-        )
-        trigger_price = max(upper, previous.high)
-        score = 68
+    main_force_volume_confirmed = volume_ratio >= BOLLINGER_MAIN_FORCE_VOLUME_MULTIPLE
+    candle_range = latest.high - latest.low
+    close_position = (latest.close - latest.low) / candle_range if candle_range > 0 else 0.0
+    bullish_body = latest.close > latest.open
+    body_percent = percent_change(latest.close, latest.open)
+    main_force_buying = (
+        main_force_volume_confirmed
+        and bullish_body
+        and close_position >= 0.7
+        and latest.close > previous.close
+    )
+    if not (first_breakout_upper and main_force_buying):
+        return None
+
+    level = SignalLevel.CONFIRMED
+    timing_status = "READY"
+    timing_note = (
+        "布林通道收斂後出現第一根收盤突破上通道的紅K，"
+        "且成交量明顯放大、收盤靠近高點，具主力攻擊買盤跡象。"
+    )
+    trigger_price = max(upper, previous.high)
+    score = 92
 
     return _signal(
         strategy="BOLLINGER_SQUEEZE",
@@ -1235,14 +1249,11 @@ def bollinger_squeeze_signal(
         timing_status=timing_status,
         timing_note=timing_note,
         reasons=[
-            "20日布林通道上軌與下軌靠近，波動進入低檔收斂",
-            f"布林寬度 {width_percent:.2f}%，位於近{BOLLINGER_LOOKBACK}日低分位 {width_percentile * 100:.0f}%",
+            "前一日20日布林通道上軌與下軌靠近，波動進入低檔收斂",
+            f"前一日布林寬度 {previous_width_percent:.2f}%，位於近{BOLLINGER_LOOKBACK}日低分位 {previous_width_percentile * 100:.0f}%",
             f"成交張數 {latest.volume / 1000:.0f} 張，大於{MIN_TRADE_VOLUME_LOTS:.0f}張",
-            (
-                "收盤突破上通道與前一日高點，且量能放大"
-                if level == SignalLevel.CONFIRMED
-                else "等待收盤突破上通道與前一日高點"
-            ),
+            f"第一根收盤突破上通道，量比 {volume_ratio:.2f}倍",
+            f"紅K收盤位置 {close_position * 100:.0f}%，具主力攻擊買盤跡象",
         ],
         extra_metrics={
             "latest_volume_lots": latest.volume / 1000,
@@ -1254,12 +1265,22 @@ def bollinger_squeeze_signal(
             "bollinger_lower": lower,
             "bollinger_width_percent": width_percent,
             "bollinger_width_percentile": width_percentile,
+            "previous_bollinger_upper": previous_upper,
+            "previous_bollinger_width_percent": previous_width_percent,
+            "previous_bollinger_width_percentile": previous_width_percentile,
             "bollinger_width_threshold_percentile": BOLLINGER_MAX_WIDTH_PERCENTILE,
             "bollinger_squeeze_confirmed": squeeze_confirmed,
-            "bollinger_breakout_upper": breakout_upper,
+            "bollinger_first_breakout_upper": first_breakout_upper,
+            "bollinger_breakout_upper": first_breakout_upper,
+            "main_force_buying": main_force_buying,
+            "main_force_volume_confirmed": main_force_volume_confirmed,
+            "close_position_percent": close_position * 100,
+            "bullish_body": bullish_body,
+            "body_percent": body_percent,
             "volume20": volume20,
             "volume_ratio": volume_ratio,
             "volume_confirmed": volume_confirmed,
+            "main_force_volume_multiple": BOLLINGER_MAIN_FORCE_VOLUME_MULTIPLE,
             "previous_high": previous.high,
         },
     )

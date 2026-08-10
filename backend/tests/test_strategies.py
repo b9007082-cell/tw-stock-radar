@@ -235,9 +235,21 @@ def _bollinger_squeeze_bars(volume: int = 3_000_000) -> list[Bar]:
     for index in range(130):
         close = 100 + math.sin(index / 3) * 5
         bars.append(_bar(index, close, volume))
-    for index in range(30):
+    for index in range(29):
         close = 100 + math.sin(index) * 0.35
         bars.append(_bar(len(bars), close, volume))
+    index = len(bars)
+    bars.append(
+        Bar(
+            date=date(2026, 1, 1) + timedelta(days=index),
+            open=101.0,
+            high=102.2,
+            low=100.5,
+            close=102.0,
+            volume=volume * 2,
+            turnover=120_000_000,
+        )
+    )
     return bars
 
 
@@ -486,18 +498,21 @@ def test_lorentzian_ml_rejects_low_liquidity() -> None:
     assert lorentzian_ml_signal(_lorentzian_bars(volume=1_900_000), 0.8) is None
 
 
-def test_bollinger_squeeze_finds_narrow_band_watch_signal() -> None:
+def test_bollinger_squeeze_finds_first_upper_breakout_with_main_force_buying() -> None:
     signal = bollinger_squeeze_signal(_bollinger_squeeze_bars())
     assert signal is not None
     assert signal.strategy == "BOLLINGER_SQUEEZE"
-    assert signal.level in {SignalLevel.WATCH, SignalLevel.TRIAL, SignalLevel.CONFIRMED}
+    assert signal.level == SignalLevel.CONFIRMED
     assert signal.metrics["bollinger_squeeze_confirmed"] is True
-    assert signal.metrics["bollinger_width_percentile"] <= 0.2
+    assert signal.metrics["previous_bollinger_width_percentile"] <= 0.2
+    assert signal.metrics["bollinger_first_breakout_upper"] is True
+    assert signal.metrics["main_force_buying"] is True
+    assert signal.metrics["volume_ratio"] >= 1.5
     assert signal.metrics["latest_volume_lots"] >= 2000
 
 
 def test_bollinger_squeeze_rejects_low_liquidity() -> None:
-    assert bollinger_squeeze_signal(_bollinger_squeeze_bars(volume=1_900_000)) is None
+    assert bollinger_squeeze_signal(_bollinger_squeeze_bars(volume=900_000)) is None
 
 
 def test_intraday_ma60_touch_finds_hourly_ma_support() -> None:
