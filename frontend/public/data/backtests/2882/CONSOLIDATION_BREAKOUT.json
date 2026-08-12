@@ -1,18 +1,18 @@
 {
-  "expectancy": -0.016785333323392916,
+  "expectancy": -0.015792296509460436,
   "gate_passed": false,
   "gate_reasons": [
     "交易樣本 1/200",
     "Profit Factor 0.00 < 1.20",
     "扣除成本後期望值未大於 0"
   ],
-  "max_drawdown": -0.016785333323392937,
+  "max_drawdown": -0.015792296509460457,
   "profit_factor": 0.0,
   "sharpe_like": 0.0,
   "strategy": "CONSOLIDATION_BREAKOUT",
   "strategy_version": "2026.08.v23",
   "symbol": "2882",
-  "total_return": -0.016785333323392937,
+  "total_return": -0.015792296509460457,
   "trades": 1,
   "win_rate": 0.0
 }
