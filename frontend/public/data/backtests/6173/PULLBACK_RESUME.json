@@ -1,18 +1,18 @@
 {
-  "expectancy": 0.0,
+  "expectancy": -0.04631973434728529,
   "gate_passed": false,
   "gate_reasons": [
-    "交易樣本 0/200",
+    "交易樣本 1/200",
     "Profit Factor 0.00 < 1.20",
     "扣除成本後期望值未大於 0"
   ],
-  "max_drawdown": 0.0,
+  "max_drawdown": -0.04631973434728531,
   "profit_factor": 0.0,
   "sharpe_like": 0.0,
   "strategy": "PULLBACK_RESUME",
   "strategy_version": "2026.08.v23",
   "symbol": "6173",
-  "total_return": 0.0,
-  "trades": 0,
+  "total_return": -0.04631973434728531,
+  "trades": 1,
   "win_rate": 0.0
 }
