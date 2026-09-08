@@ -1,6 +1,6 @@
 {
   "first_trade_date": "2026-03-09",
-  "latest_trade_date": "2026-09-07",
+  "latest_trade_date": "2026-09-08",
   "schema_version": 1,
   "snapshots": {
     "2026-03-09.json.gz": {
@@ -506,7 +506,11 @@
     "2026-09-07.json.gz": {
       "bytes": 67418,
       "sha256": "2385aca88adac6d462a9f522a40a6cf9853b0102dcf7a5804dd3ccbd213f76ed"
+    },
+    "2026-09-08.json.gz": {
+      "bytes": 66984,
+      "sha256": "9ce98dd159b798a47a0d956429721d84f9d831beb0a2e1e373f06f188fdbbd2f"
     }
   },
-  "trading_days": 126
+  "trading_days": 127
 }
