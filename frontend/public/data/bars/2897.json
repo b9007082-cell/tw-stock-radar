@@ -1,32 +1,5 @@
 [
   {
-    "close": 9.76,
-    "high": 9.79,
-    "low": 9.67,
-    "open": 9.67,
-    "trade_date": "2026-03-11",
-    "turnover": 46693867.0,
-    "volume": 4786203
-  },
-  {
-    "close": 9.98,
-    "high": 10.05,
-    "low": 9.89,
-    "open": 9.95,
-    "trade_date": "2026-03-12",
-    "turnover": 111638588.0,
-    "volume": 11188210
-  },
-  {
-    "close": 9.93,
-    "high": 9.99,
-    "low": 9.9,
-    "open": 9.98,
-    "trade_date": "2026-03-13",
-    "turnover": 29091463.0,
-    "volume": 2927393
-  },
-  {
     "close": 9.94,
     "high": 9.95,
     "low": 9.9,
@@ -1141,5 +1114,23 @@
     "trade_date": "2026-09-10",
     "turnover": 28352215.0,
     "volume": 2623489
+  },
+  {
+    "close": 11.0,
+    "high": 11.0,
+    "low": 10.75,
+    "open": 10.8,
+    "trade_date": "2026-09-11",
+    "turnover": 39511612.0,
+    "volume": 3621275
+  },
+  {
+    "close": 11.25,
+    "high": 11.35,
+    "low": 10.9,
+    "open": 11.0,
+    "trade_date": "2026-09-14",
+    "turnover": 149549430.0,
+    "volume": 13429710
   }
 ]

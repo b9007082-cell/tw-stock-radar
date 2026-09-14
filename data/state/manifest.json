@@ -1,20 +1,8 @@
 {
-  "first_trade_date": "2026-03-11",
-  "latest_trade_date": "2026-09-10",
+  "first_trade_date": "2026-03-16",
+  "latest_trade_date": "2026-09-14",
   "schema_version": 1,
   "snapshots": {
-    "2026-03-11.json.gz": {
-      "bytes": 66673,
-      "sha256": "c7ecfc0edb20051797f3e7beee4ff568a72ae0da4c0150d501bd2c50200fea13"
-    },
-    "2026-03-12.json.gz": {
-      "bytes": 66551,
-      "sha256": "8781a2c98a2d52649f84b51d0b6431ba016c537b940c7520f6bc8dedd3049733"
-    },
-    "2026-03-13.json.gz": {
-      "bytes": 66705,
-      "sha256": "ec4677ba9e66820b06aad7801bd6fe19544db4d96cec97d8a633fd73adb7b57f"
-    },
     "2026-03-16.json.gz": {
       "bytes": 66920,
       "sha256": "54bc3cd35c0def9b404241e4cadae6f3c7bc0116aa09f9e444c101cadd8c09bf"
@@ -510,7 +498,15 @@
     "2026-09-10.json.gz": {
       "bytes": 66674,
       "sha256": "6e6bb4b9ef5fc26fefd3bc712996c8989dd2be85f3e57573e41dd1b8c8e86d09"
+    },
+    "2026-09-11.json.gz": {
+      "bytes": 66694,
+      "sha256": "58b56f6cdba5d23a052d34205dc6fafa3ed512034ae1831662856c9a0429fda1"
+    },
+    "2026-09-14.json.gz": {
+      "bytes": 66530,
+      "sha256": "54a313b0d1294828644a6e841d43aade302583d97f70d03643609d49eb7da76a"
     }
   },
-  "trading_days": 127
+  "trading_days": 126
 }

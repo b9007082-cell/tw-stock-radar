@@ -1,5 +1,5 @@
 {
-  "expectancy": 0.019206269032172728,
+  "expectancy": 0.040248479833419636,
   "gate_passed": false,
   "gate_reasons": [
     "交易樣本 1/200"
@@ -10,7 +10,7 @@
   "strategy": "LORENTZIAN_ML",
   "strategy_version": "2026.08.v23",
   "symbol": "2820",
-  "total_return": 0.019206269032172818,
+  "total_return": 0.040248479833419726,
   "trades": 1,
   "win_rate": 1.0
 }
