@@ -1,23 +1,5 @@
 [
   {
-    "close": 71.0,
-    "high": 71.5,
-    "low": 68.1,
-    "open": 68.1,
-    "trade_date": "2026-03-26",
-    "turnover": 31120885.0,
-    "volume": 441782
-  },
-  {
-    "close": 76.7,
-    "high": 77.7,
-    "low": 69.5,
-    "open": 70.7,
-    "trade_date": "2026-03-27",
-    "turnover": 44524604.0,
-    "volume": 593838
-  },
-  {
     "close": 75.6,
     "high": 79.9,
     "low": 74.9,
