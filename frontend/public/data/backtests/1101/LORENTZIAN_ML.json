@@ -1,0 +1,18 @@
+{
+  "expectancy": -0.02531784459551872,
+  "gate_passed": false,
+  "gate_reasons": [
+    "交易樣本 3/200",
+    "Profit Factor 0.17 < 1.20",
+    "扣除成本後期望值未大於 0"
+  ],
+  "max_drawdown": -0.08942135846403054,
+  "profit_factor": 0.1690457145404247,
+  "sharpe_like": -0.8434564493567672,
+  "strategy": "LORENTZIAN_ML",
+  "strategy_version": "2026.08.v23",
+  "symbol": "1101",
+  "total_return": -0.07535141095029407,
+  "trades": 3,
+  "win_rate": 0.3333333333333333
+}
