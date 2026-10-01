@@ -1,5 +1,5 @@
 {
-  "expectancy": 0.19128928762652678,
+  "expectancy": 0.15192493967749213,
   "gate_passed": false,
   "gate_reasons": [
     "交易樣本 1/200"
@@ -10,7 +10,7 @@
   "strategy": "PULLBACK_RESUME",
   "strategy_version": "2026.08.v23",
   "symbol": "1528",
-  "total_return": 0.19128928762652686,
+  "total_return": 0.1519249396774922,
   "trades": 1,
   "win_rate": 1.0
 }
