@@ -1,0 +1,1118 @@
+[
+  {
+    "close": 22.8,
+    "high": 22.85,
+    "low": 21.8,
+    "open": 22.15,
+    "trade_date": "2026-04-07",
+    "turnover": 41666724.0,
+    "volume": 1861284
+  },
+  {
+    "close": 23.85,
+    "high": 24.2,
+    "low": 22.15,
+    "open": 22.85,
+    "trade_date": "2026-04-08",
+    "turnover": 95819416.0,
+    "volume": 4103555
+  },
+  {
+    "close": 22.9,
+    "high": 23.95,
+    "low": 22.9,
+    "open": 23.9,
+    "trade_date": "2026-04-09",
+    "turnover": 109819623.0,
+    "volume": 4694553
+  },
+  {
+    "close": 22.15,
+    "high": 23.3,
+    "low": 22.05,
+    "open": 23.0,
+    "trade_date": "2026-04-10",
+    "turnover": 43004910.0,
+    "volume": 1919325
+  },
+  {
+    "close": 22.35,
+    "high": 22.8,
+    "low": 21.95,
+    "open": 22.15,
+    "trade_date": "2026-04-13",
+    "turnover": 28439953.0,
+    "volume": 1268432
+  },
+  {
+    "close": 21.85,
+    "high": 22.6,
+    "low": 21.85,
+    "open": 22.6,
+    "trade_date": "2026-04-14",
+    "turnover": 38493980.0,
+    "volume": 1743815
+  },
+  {
+    "close": 21.85,
+    "high": 22.3,
+    "low": 21.7,
+    "open": 22.05,
+    "trade_date": "2026-04-15",
+    "turnover": 26017703.0,
+    "volume": 1186888
+  },
+  {
+    "close": 21.85,
+    "high": 22.35,
+    "low": 21.85,
+    "open": 21.95,
+    "trade_date": "2026-04-16",
+    "turnover": 22311310.0,
+    "volume": 1009795
+  },
+  {
+    "close": 21.9,
+    "high": 22.25,
+    "low": 21.75,
+    "open": 22.05,
+    "trade_date": "2026-04-17",
+    "turnover": 26355705.0,
+    "volume": 1199685
+  },
+  {
+    "close": 22.45,
+    "high": 22.65,
+    "low": 22.0,
+    "open": 22.0,
+    "trade_date": "2026-04-20",
+    "turnover": 27200391.0,
+    "volume": 1215010
+  },
+  {
+    "close": 22.3,
+    "high": 22.95,
+    "low": 22.1,
+    "open": 22.85,
+    "trade_date": "2026-04-21",
+    "turnover": 22218958.0,
+    "volume": 991478
+  },
+  {
+    "close": 22.1,
+    "high": 22.35,
+    "low": 21.9,
+    "open": 22.3,
+    "trade_date": "2026-04-22",
+    "turnover": 24829749.0,
+    "volume": 1122800
+  },
+  {
+    "close": 21.05,
+    "high": 22.2,
+    "low": 20.7,
+    "open": 22.15,
+    "trade_date": "2026-04-23",
+    "turnover": 33622296.0,
+    "volume": 1575398
+  },
+  {
+    "close": 20.65,
+    "high": 21.85,
+    "low": 20.6,
+    "open": 21.7,
+    "trade_date": "2026-04-24",
+    "turnover": 16921378.0,
+    "volume": 809528
+  },
+  {
+    "close": 19.8,
+    "high": 20.6,
+    "low": 19.55,
+    "open": 20.6,
+    "trade_date": "2026-04-27",
+    "turnover": 24891456.0,
+    "volume": 1251086
+  },
+  {
+    "close": 19.95,
+    "high": 20.25,
+    "low": 19.65,
+    "open": 20.1,
+    "trade_date": "2026-04-28",
+    "turnover": 10161881.0,
+    "volume": 509073
+  },
+  {
+    "close": 19.75,
+    "high": 20.2,
+    "low": 19.7,
+    "open": 20.2,
+    "trade_date": "2026-04-29",
+    "turnover": 10263571.0,
+    "volume": 516830
+  },
+  {
+    "close": 19.5,
+    "high": 19.8,
+    "low": 19.5,
+    "open": 19.75,
+    "trade_date": "2026-04-30",
+    "turnover": 7832723.0,
+    "volume": 398885
+  },
+  {
+    "close": 20.0,
+    "high": 20.3,
+    "low": 19.8,
+    "open": 19.85,
+    "trade_date": "2026-05-04",
+    "turnover": 12890799.0,
+    "volume": 641985
+  },
+  {
+    "close": 22.0,
+    "high": 22.0,
+    "low": 20.0,
+    "open": 20.0,
+    "trade_date": "2026-05-05",
+    "turnover": 39612807.0,
+    "volume": 1859523
+  },
+  {
+    "close": 22.9,
+    "high": 23.45,
+    "low": 22.25,
+    "open": 22.9,
+    "trade_date": "2026-05-06",
+    "turnover": 175459113.0,
+    "volume": 7636227
+  },
+  {
+    "close": 24.2,
+    "high": 24.2,
+    "low": 22.35,
+    "open": 23.1,
+    "trade_date": "2026-05-07",
+    "turnover": 130536601.0,
+    "volume": 5611740
+  },
+  {
+    "close": 24.05,
+    "high": 24.75,
+    "low": 23.45,
+    "open": 24.25,
+    "trade_date": "2026-05-08",
+    "turnover": 161280583.0,
+    "volume": 6716856
+  },
+  {
+    "close": 23.3,
+    "high": 24.4,
+    "low": 23.3,
+    "open": 24.3,
+    "trade_date": "2026-05-11",
+    "turnover": 80353204.0,
+    "volume": 3399123
+  },
+  {
+    "close": 22.8,
+    "high": 23.3,
+    "low": 22.25,
+    "open": 23.3,
+    "trade_date": "2026-05-12",
+    "turnover": 56903188.0,
+    "volume": 2514297
+  },
+  {
+    "close": 22.3,
+    "high": 22.9,
+    "low": 22.0,
+    "open": 22.9,
+    "trade_date": "2026-05-13",
+    "turnover": 32985282.0,
+    "volume": 1475742
+  },
+  {
+    "close": 22.2,
+    "high": 23.2,
+    "low": 22.2,
+    "open": 22.3,
+    "trade_date": "2026-05-14",
+    "turnover": 29855239.0,
+    "volume": 1323308
+  },
+  {
+    "close": 22.15,
+    "high": 22.7,
+    "low": 21.85,
+    "open": 22.2,
+    "trade_date": "2026-05-15",
+    "turnover": 24841234.0,
+    "volume": 1121434
+  },
+  {
+    "close": 22.45,
+    "high": 23.15,
+    "low": 21.7,
+    "open": 22.1,
+    "trade_date": "2026-05-18",
+    "turnover": 61545467.0,
+    "volume": 2708300
+  },
+  {
+    "close": 22.5,
+    "high": 23.55,
+    "low": 22.4,
+    "open": 22.55,
+    "trade_date": "2026-05-19",
+    "turnover": 45509915.0,
+    "volume": 1979909
+  },
+  {
+    "close": 23.05,
+    "high": 23.25,
+    "low": 22.7,
+    "open": 22.8,
+    "trade_date": "2026-05-20",
+    "turnover": 37724630.0,
+    "volume": 1638222
+  },
+  {
+    "close": 23.75,
+    "high": 24.3,
+    "low": 23.1,
+    "open": 23.55,
+    "trade_date": "2026-05-21",
+    "turnover": 115660335.0,
+    "volume": 4854715
+  },
+  {
+    "close": 24.65,
+    "high": 25.0,
+    "low": 24.05,
+    "open": 24.1,
+    "trade_date": "2026-05-22",
+    "turnover": 115936032.0,
+    "volume": 4702922
+  },
+  {
+    "close": 22.95,
+    "high": 25.0,
+    "low": 22.95,
+    "open": 25.0,
+    "trade_date": "2026-05-25",
+    "turnover": 100617451.0,
+    "volume": 4285479
+  },
+  {
+    "close": 22.45,
+    "high": 23.5,
+    "low": 22.0,
+    "open": 23.5,
+    "trade_date": "2026-05-26",
+    "turnover": 57880131.0,
+    "volume": 2580227
+  },
+  {
+    "close": 22.0,
+    "high": 22.65,
+    "low": 21.95,
+    "open": 22.5,
+    "trade_date": "2026-05-27",
+    "turnover": 38763246.0,
+    "volume": 1744096
+  },
+  {
+    "close": 21.6,
+    "high": 22.4,
+    "low": 21.4,
+    "open": 22.0,
+    "trade_date": "2026-05-28",
+    "turnover": 82071959.0,
+    "volume": 3779536
+  },
+  {
+    "close": 22.6,
+    "high": 22.6,
+    "low": 21.5,
+    "open": 21.8,
+    "trade_date": "2026-05-29",
+    "turnover": 33148446.0,
+    "volume": 1489537
+  },
+  {
+    "close": 22.4,
+    "high": 23.15,
+    "low": 22.05,
+    "open": 22.85,
+    "trade_date": "2026-06-01",
+    "turnover": 50671268.0,
+    "volume": 2246659
+  },
+  {
+    "close": 22.4,
+    "high": 22.65,
+    "low": 21.9,
+    "open": 22.45,
+    "trade_date": "2026-06-02",
+    "turnover": 36757235.0,
+    "volume": 1655102
+  },
+  {
+    "close": 23.35,
+    "high": 23.6,
+    "low": 22.45,
+    "open": 22.45,
+    "trade_date": "2026-06-03",
+    "turnover": 84975654.0,
+    "volume": 3678953
+  },
+  {
+    "close": 22.85,
+    "high": 23.55,
+    "low": 22.65,
+    "open": 23.5,
+    "trade_date": "2026-06-04",
+    "turnover": 45208850.0,
+    "volume": 1973673
+  },
+  {
+    "close": 22.25,
+    "high": 22.85,
+    "low": 22.2,
+    "open": 22.85,
+    "trade_date": "2026-06-05",
+    "turnover": 29236903.0,
+    "volume": 1306331
+  },
+  {
+    "close": 21.45,
+    "high": 21.45,
+    "low": 20.55,
+    "open": 20.6,
+    "trade_date": "2026-06-08",
+    "turnover": 36889869.0,
+    "volume": 1767604
+  },
+  {
+    "close": 21.15,
+    "high": 21.5,
+    "low": 20.8,
+    "open": 21.5,
+    "trade_date": "2026-06-09",
+    "turnover": 34573222.0,
+    "volume": 1638773
+  },
+  {
+    "close": 20.2,
+    "high": 21.3,
+    "low": 20.1,
+    "open": 21.0,
+    "trade_date": "2026-06-10",
+    "turnover": 56171995.0,
+    "volume": 2731241
+  },
+  {
+    "close": 20.3,
+    "high": 20.9,
+    "low": 20.1,
+    "open": 20.2,
+    "trade_date": "2026-06-11",
+    "turnover": 36161768.0,
+    "volume": 1765550
+  },
+  {
+    "close": 20.25,
+    "high": 20.65,
+    "low": 20.25,
+    "open": 20.6,
+    "trade_date": "2026-06-12",
+    "turnover": 21939207.0,
+    "volume": 1077483
+  },
+  {
+    "close": 22.25,
+    "high": 22.25,
+    "low": 21.4,
+    "open": 22.0,
+    "trade_date": "2026-06-15",
+    "turnover": 77004630.0,
+    "volume": 3470740
+  },
+  {
+    "close": 21.65,
+    "high": 23.35,
+    "low": 21.65,
+    "open": 22.0,
+    "trade_date": "2026-06-16",
+    "turnover": 97129145.0,
+    "volume": 4310614
+  },
+  {
+    "close": 22.45,
+    "high": 23.8,
+    "low": 21.7,
+    "open": 21.7,
+    "trade_date": "2026-06-17",
+    "turnover": 453468084.0,
+    "volume": 19629286
+  },
+  {
+    "close": 22.55,
+    "high": 23.55,
+    "low": 22.45,
+    "open": 22.8,
+    "trade_date": "2026-06-18",
+    "turnover": 197151801.0,
+    "volume": 8578935
+  },
+  {
+    "close": 22.2,
+    "high": 23.1,
+    "low": 21.85,
+    "open": 23.0,
+    "trade_date": "2026-06-22",
+    "turnover": 76004995.0,
+    "volume": 3417000
+  },
+  {
+    "close": 22.15,
+    "high": 22.3,
+    "low": 21.65,
+    "open": 22.25,
+    "trade_date": "2026-06-23",
+    "turnover": 43513746.0,
+    "volume": 1981281
+  },
+  {
+    "close": 22.45,
+    "high": 22.45,
+    "low": 21.6,
+    "open": 22.0,
+    "trade_date": "2026-06-24",
+    "turnover": 42410703.0,
+    "volume": 1932954
+  },
+  {
+    "close": 22.35,
+    "high": 22.9,
+    "low": 22.1,
+    "open": 22.5,
+    "trade_date": "2026-06-25",
+    "turnover": 67623510.0,
+    "volume": 3009933
+  },
+  {
+    "close": 23.6,
+    "high": 24.55,
+    "low": 22.2,
+    "open": 22.2,
+    "trade_date": "2026-06-26",
+    "turnover": 269071715.0,
+    "volume": 11385294
+  },
+  {
+    "close": 25.95,
+    "high": 25.95,
+    "low": 25.1,
+    "open": 25.9,
+    "trade_date": "2026-06-29",
+    "turnover": 539390496.0,
+    "volume": 20834636
+  },
+  {
+    "close": 27.45,
+    "high": 27.65,
+    "low": 25.45,
+    "open": 25.95,
+    "trade_date": "2026-06-30",
+    "turnover": 847744524.0,
+    "volume": 31917686
+  },
+  {
+    "close": 28.95,
+    "high": 30.15,
+    "low": 27.6,
+    "open": 28.2,
+    "trade_date": "2026-07-01",
+    "turnover": 1250064060.0,
+    "volume": 42492804
+  },
+  {
+    "close": 28.55,
+    "high": 29.75,
+    "low": 27.4,
+    "open": 28.85,
+    "trade_date": "2026-07-02",
+    "turnover": 471401156.0,
+    "volume": 16647734
+  },
+  {
+    "close": 28.9,
+    "high": 28.95,
+    "low": 27.75,
+    "open": 28.55,
+    "trade_date": "2026-07-03",
+    "turnover": 223365095.0,
+    "volume": 7894307
+  },
+  {
+    "close": 29.35,
+    "high": 31.5,
+    "low": 29.3,
+    "open": 29.6,
+    "trade_date": "2026-07-06",
+    "turnover": 457660003.0,
+    "volume": 15176587
+  },
+  {
+    "close": 27.6,
+    "high": 31.0,
+    "low": 27.2,
+    "open": 30.1,
+    "trade_date": "2026-07-07",
+    "turnover": 629004854.0,
+    "volume": 21643392
+  },
+  {
+    "close": 27.55,
+    "high": 28.4,
+    "low": 27.0,
+    "open": 27.85,
+    "trade_date": "2026-07-08",
+    "turnover": 152683221.0,
+    "volume": 5541942
+  },
+  {
+    "close": 25.45,
+    "high": 27.55,
+    "low": 25.2,
+    "open": 27.3,
+    "trade_date": "2026-07-09",
+    "turnover": 228238182.0,
+    "volume": 8710114
+  },
+  {
+    "close": 25.4,
+    "high": 26.3,
+    "low": 24.95,
+    "open": 26.0,
+    "trade_date": "2026-07-13",
+    "turnover": 108444647.0,
+    "volume": 4250734
+  },
+  {
+    "close": 24.5,
+    "high": 25.7,
+    "low": 23.1,
+    "open": 25.6,
+    "trade_date": "2026-07-14",
+    "turnover": 139714514.0,
+    "volume": 5764966
+  },
+  {
+    "close": 24.3,
+    "high": 24.95,
+    "low": 24.0,
+    "open": 24.8,
+    "trade_date": "2026-07-15",
+    "turnover": 64572943.0,
+    "volume": 2647209
+  },
+  {
+    "close": 24.1,
+    "high": 24.75,
+    "low": 23.8,
+    "open": 24.3,
+    "trade_date": "2026-07-16",
+    "turnover": 66238519.0,
+    "volume": 2734219
+  },
+  {
+    "close": 22.45,
+    "high": 23.75,
+    "low": 22.1,
+    "open": 23.75,
+    "trade_date": "2026-07-17",
+    "turnover": 105599118.0,
+    "volume": 4629743
+  },
+  {
+    "close": 21.9,
+    "high": 22.45,
+    "low": 21.3,
+    "open": 22.45,
+    "trade_date": "2026-07-20",
+    "turnover": 99160754.0,
+    "volume": 4535355
+  },
+  {
+    "close": 21.85,
+    "high": 22.3,
+    "low": 21.7,
+    "open": 22.3,
+    "trade_date": "2026-07-21",
+    "turnover": 45243973.0,
+    "volume": 2066578
+  },
+  {
+    "close": 21.85,
+    "high": 22.5,
+    "low": 21.8,
+    "open": 22.05,
+    "trade_date": "2026-07-22",
+    "turnover": 54457462.0,
+    "volume": 2475953
+  },
+  {
+    "close": 22.8,
+    "high": 23.0,
+    "low": 21.85,
+    "open": 22.1,
+    "trade_date": "2026-07-23",
+    "turnover": 99218252.0,
+    "volume": 4405466
+  },
+  {
+    "close": 21.7,
+    "high": 22.75,
+    "low": 21.65,
+    "open": 22.4,
+    "trade_date": "2026-07-24",
+    "turnover": 75942267.0,
+    "volume": 3451668
+  },
+  {
+    "close": 22.1,
+    "high": 22.5,
+    "low": 21.55,
+    "open": 22.25,
+    "trade_date": "2026-07-27",
+    "turnover": 38735104.0,
+    "volume": 1761746
+  },
+  {
+    "close": 21.15,
+    "high": 22.05,
+    "low": 21.1,
+    "open": 21.7,
+    "trade_date": "2026-07-28",
+    "turnover": 42052666.0,
+    "volume": 1964992
+  },
+  {
+    "close": 20.4,
+    "high": 21.45,
+    "low": 19.35,
+    "open": 21.2,
+    "trade_date": "2026-07-29",
+    "turnover": 86672290.0,
+    "volume": 4267289
+  },
+  {
+    "close": 20.3,
+    "high": 21.5,
+    "low": 20.1,
+    "open": 20.4,
+    "trade_date": "2026-07-30",
+    "turnover": 37162443.0,
+    "volume": 1791679
+  },
+  {
+    "close": 22.1,
+    "high": 22.3,
+    "low": 21.3,
+    "open": 21.5,
+    "trade_date": "2026-07-31",
+    "turnover": 66489246.0,
+    "volume": 3028847
+  },
+  {
+    "close": 22.85,
+    "high": 23.5,
+    "low": 22.1,
+    "open": 22.2,
+    "trade_date": "2026-08-03",
+    "turnover": 51191756.0,
+    "volume": 2231813
+  },
+  {
+    "close": 23.15,
+    "high": 23.3,
+    "low": 22.4,
+    "open": 22.4,
+    "trade_date": "2026-08-04",
+    "turnover": 40450075.0,
+    "volume": 1758895
+  },
+  {
+    "close": 23.05,
+    "high": 23.95,
+    "low": 23.0,
+    "open": 23.3,
+    "trade_date": "2026-08-05",
+    "turnover": 51261945.0,
+    "volume": 2201658
+  },
+  {
+    "close": 22.9,
+    "high": 23.05,
+    "low": 22.4,
+    "open": 23.05,
+    "trade_date": "2026-08-06",
+    "turnover": 50701981.0,
+    "volume": 2229226
+  },
+  {
+    "close": 24.05,
+    "high": 25.15,
+    "low": 23.95,
+    "open": 24.8,
+    "trade_date": "2026-08-07",
+    "turnover": 260523922.0,
+    "volume": 10508699
+  },
+  {
+    "close": 23.45,
+    "high": 24.35,
+    "low": 23.45,
+    "open": 24.0,
+    "trade_date": "2026-08-10",
+    "turnover": 91831415.0,
+    "volume": 3849724
+  },
+  {
+    "close": 22.9,
+    "high": 23.8,
+    "low": 22.9,
+    "open": 23.5,
+    "trade_date": "2026-08-11",
+    "turnover": 50927010.0,
+    "volume": 2198505
+  },
+  {
+    "close": 22.9,
+    "high": 23.15,
+    "low": 22.75,
+    "open": 23.0,
+    "trade_date": "2026-08-12",
+    "turnover": 33182769.0,
+    "volume": 1446172
+  },
+  {
+    "close": 22.7,
+    "high": 23.15,
+    "low": 22.4,
+    "open": 23.15,
+    "trade_date": "2026-08-13",
+    "turnover": 34632030.0,
+    "volume": 1520143
+  },
+  {
+    "close": 22.55,
+    "high": 23.25,
+    "low": 22.0,
+    "open": 23.25,
+    "trade_date": "2026-08-14",
+    "turnover": 48580529.0,
+    "volume": 2160501
+  },
+  {
+    "close": 22.15,
+    "high": 22.9,
+    "low": 22.1,
+    "open": 22.9,
+    "trade_date": "2026-08-17",
+    "turnover": 33293255.0,
+    "volume": 1488414
+  },
+  {
+    "close": 22.45,
+    "high": 23.2,
+    "low": 22.2,
+    "open": 22.5,
+    "trade_date": "2026-08-18",
+    "turnover": 37200908.0,
+    "volume": 1641446
+  },
+  {
+    "close": 22.2,
+    "high": 23.0,
+    "low": 22.0,
+    "open": 22.05,
+    "trade_date": "2026-08-19",
+    "turnover": 28607416.0,
+    "volume": 1276593
+  },
+  {
+    "close": 22.15,
+    "high": 22.7,
+    "low": 22.0,
+    "open": 22.55,
+    "trade_date": "2026-08-20",
+    "turnover": 24655617.0,
+    "volume": 1109276
+  },
+  {
+    "close": 22.25,
+    "high": 22.5,
+    "low": 22.15,
+    "open": 22.4,
+    "trade_date": "2026-08-21",
+    "turnover": 19964777.0,
+    "volume": 895268
+  },
+  {
+    "close": 22.45,
+    "high": 22.75,
+    "low": 22.15,
+    "open": 22.5,
+    "trade_date": "2026-08-24",
+    "turnover": 29124794.0,
+    "volume": 1300568
+  },
+  {
+    "close": 22.75,
+    "high": 22.75,
+    "low": 22.05,
+    "open": 22.5,
+    "trade_date": "2026-08-25",
+    "turnover": 16716211.0,
+    "volume": 742783
+  },
+  {
+    "close": 22.85,
+    "high": 23.1,
+    "low": 22.7,
+    "open": 22.7,
+    "trade_date": "2026-08-26",
+    "turnover": 21621180.0,
+    "volume": 945677
+  },
+  {
+    "close": 23.0,
+    "high": 23.4,
+    "low": 22.65,
+    "open": 22.9,
+    "trade_date": "2026-08-27",
+    "turnover": 31240440.0,
+    "volume": 1356428
+  },
+  {
+    "close": 23.25,
+    "high": 23.55,
+    "low": 23.0,
+    "open": 23.25,
+    "trade_date": "2026-08-28",
+    "turnover": 49535027.0,
+    "volume": 2126255
+  },
+  {
+    "close": 22.65,
+    "high": 23.3,
+    "low": 22.65,
+    "open": 23.2,
+    "trade_date": "2026-08-31",
+    "turnover": 28188278.0,
+    "volume": 1230226
+  },
+  {
+    "close": 22.3,
+    "high": 22.8,
+    "low": 22.15,
+    "open": 22.7,
+    "trade_date": "2026-09-01",
+    "turnover": 36343300.0,
+    "volume": 1627170
+  },
+  {
+    "close": 22.35,
+    "high": 22.5,
+    "low": 21.95,
+    "open": 22.3,
+    "trade_date": "2026-09-02",
+    "turnover": 18420167.0,
+    "volume": 827774
+  },
+  {
+    "close": 22.05,
+    "high": 22.95,
+    "low": 22.05,
+    "open": 22.4,
+    "trade_date": "2026-09-03",
+    "turnover": 31417356.0,
+    "volume": 1404156
+  },
+  {
+    "close": 22.3,
+    "high": 22.6,
+    "low": 22.05,
+    "open": 22.6,
+    "trade_date": "2026-09-04",
+    "turnover": 20277014.0,
+    "volume": 907714
+  },
+  {
+    "close": 21.85,
+    "high": 22.4,
+    "low": 21.75,
+    "open": 22.35,
+    "trade_date": "2026-09-07",
+    "turnover": 44711056.0,
+    "volume": 2038372
+  },
+  {
+    "close": 21.4,
+    "high": 21.95,
+    "low": 21.3,
+    "open": 21.95,
+    "trade_date": "2026-09-08",
+    "turnover": 31687391.0,
+    "volume": 1473154
+  },
+  {
+    "close": 21.75,
+    "high": 22.3,
+    "low": 21.1,
+    "open": 21.1,
+    "trade_date": "2026-09-09",
+    "turnover": 25865545.0,
+    "volume": 1183682
+  },
+  {
+    "close": 21.45,
+    "high": 21.9,
+    "low": 21.2,
+    "open": 21.9,
+    "trade_date": "2026-09-10",
+    "turnover": 20074319.0,
+    "volume": 941489
+  },
+  {
+    "close": 21.05,
+    "high": 21.3,
+    "low": 21.0,
+    "open": 21.3,
+    "trade_date": "2026-09-11",
+    "turnover": 16011945.0,
+    "volume": 758063
+  },
+  {
+    "close": 21.1,
+    "high": 21.25,
+    "low": 20.9,
+    "open": 21.15,
+    "trade_date": "2026-09-14",
+    "turnover": 12224233.0,
+    "volume": 580182
+  },
+  {
+    "close": 21.0,
+    "high": 21.1,
+    "low": 20.9,
+    "open": 21.1,
+    "trade_date": "2026-09-15",
+    "turnover": 9885120.0,
+    "volume": 470577
+  },
+  {
+    "close": 21.95,
+    "high": 22.15,
+    "low": 21.0,
+    "open": 21.0,
+    "trade_date": "2026-09-16",
+    "turnover": 17433864.0,
+    "volume": 803152
+  },
+  {
+    "close": 22.9,
+    "high": 23.15,
+    "low": 21.9,
+    "open": 22.0,
+    "trade_date": "2026-09-17",
+    "turnover": 89767775.0,
+    "volume": 3951914
+  },
+  {
+    "close": 25.1,
+    "high": 25.15,
+    "low": 23.05,
+    "open": 23.3,
+    "trade_date": "2026-09-18",
+    "turnover": 423127164.0,
+    "volume": 16980049
+  },
+  {
+    "close": 24.9,
+    "high": 27.6,
+    "low": 24.8,
+    "open": 26.0,
+    "trade_date": "2026-09-21",
+    "turnover": 537013907.0,
+    "volume": 20510332
+  },
+  {
+    "close": 25.25,
+    "high": 26.3,
+    "low": 24.95,
+    "open": 25.3,
+    "trade_date": "2026-09-22",
+    "turnover": 222882319.0,
+    "volume": 8764718
+  },
+  {
+    "close": 26.05,
+    "high": 27.75,
+    "low": 25.35,
+    "open": 25.55,
+    "trade_date": "2026-09-23",
+    "turnover": 812202248.0,
+    "volume": 30360262
+  },
+  {
+    "close": 25.35,
+    "high": 26.5,
+    "low": 24.5,
+    "open": 25.55,
+    "trade_date": "2026-09-24",
+    "turnover": 337770335.0,
+    "volume": 13381856
+  },
+  {
+    "close": 27.85,
+    "high": 27.85,
+    "low": 25.85,
+    "open": 26.0,
+    "trade_date": "2026-09-29",
+    "turnover": 466154498.0,
+    "volume": 17004945
+  },
+  {
+    "close": 27.7,
+    "high": 28.85,
+    "low": 27.3,
+    "open": 28.6,
+    "trade_date": "2026-09-30",
+    "turnover": 884996636.0,
+    "volume": 31519820
+  },
+  {
+    "close": 27.35,
+    "high": 28.2,
+    "low": 27.05,
+    "open": 27.5,
+    "trade_date": "2026-10-01",
+    "turnover": 243862923.0,
+    "volume": 8871822
+  },
+  {
+    "close": 26.45,
+    "high": 27.5,
+    "low": 26.4,
+    "open": 27.25,
+    "trade_date": "2026-10-02",
+    "turnover": 251299626.0,
+    "volume": 9385198
+  }
+]
