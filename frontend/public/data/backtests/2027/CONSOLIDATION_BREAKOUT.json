@@ -1,5 +1,5 @@
 {
-  "expectancy": 0.013173103275861651,
+  "expectancy": 0.015175113301943897,
   "gate_passed": false,
   "gate_reasons": [
     "交易樣本 1/200"
@@ -10,7 +10,7 @@
   "strategy": "CONSOLIDATION_BREAKOUT",
   "strategy_version": "2026.08.v23",
   "symbol": "2027",
-  "total_return": 0.013173103275861742,
+  "total_return": 0.015175113301943988,
   "trades": 1,
   "win_rate": 1.0
 }
