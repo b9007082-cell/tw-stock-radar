@@ -1,0 +1,16 @@
+{
+  "expectancy": 0.02043545543525318,
+  "gate_passed": false,
+  "gate_reasons": [
+    "交易樣本 1/200"
+  ],
+  "max_drawdown": 0.0,
+  "profit_factor": null,
+  "sharpe_like": 0.0,
+  "strategy": "DISPOSITION_REVERSAL",
+  "strategy_version": "2026.08.v23",
+  "symbol": "3324",
+  "total_return": 0.02043545543525327,
+  "trades": 1,
+  "win_rate": 1.0
+}
